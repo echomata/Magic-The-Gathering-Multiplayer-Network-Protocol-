@@ -70,11 +70,6 @@ mtgnp/
 
 ### Setup
 
-Navigate to the project directory:
-```bash
-cd "C:\Users\Paul\Codes\CSNETWK MP"
-```
-
 ### Start Server
 ```bash
 python launcher.py server --port 4444 --verbose
