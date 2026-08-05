@@ -1,0 +1,194 @@
+"""CLI entry point for MTGNP with bonus features."""
+import argparse
+import sys
+import json
+import os
+
+from constants import DEFAULT_PORT
+from server import MTGNPServer
+from client import MTGNPClient
+from spectator import SpectatorClient
+from card_catalog import list_available_cards
+from game_logger import GameLogger
+
+
+def print_card_summary():
+    """Print a summary of available cards."""
+    summary = list_available_cards()
+    
+    print("\n" + "="*60)
+    print("MTGNP Card Catalog Summary")
+    print("="*60)
+    print(f"Total Cards: {summary['total']}")
+    
+    print("\nBy Type:")
+    for ct, count in sorted(summary['by_type'].items()):
+        print(f"  {ct}: {count}")
+    
+    print("\nBy Color:")
+    color_names = {'W': 'White', 'U': 'Blue', 'B': 'Black', 'R': 'Red', 'G': 'Green', 'C': 'Colorless'}
+    for color, count in sorted(summary['by_color'].items()):
+        name = color_names.get(color, color)
+        print(f"  {name}: {count}")
+    print("="*60 + "\n")
+
+
+def run_client_interactive(client):
+    """Run interactive client mode."""
+    print("\nMTGNP Client - Interactive Mode")
+    print("Commands:")
+    print("  help         - Show this help")
+    print("  hand         - Show your hand")
+    print("  state        - Show full game state")
+    print("  pass         - Pass priority")
+    print("  concede      - Concede the game")
+    print("  cast <card> [targets...] - Cast a spell")
+    print("  land <card>  - Play a land")
+    print("  attack <id> [target] - Declare attacker")
+    print("  block <id> <attacker> - Declare blocker")
+    print("  list         - List available cards")
+    print("  quit/exit    - Exit client")
+    print()
+
+    try:
+        while client.running:
+            cmd = input("\n> ").strip()
+            if not cmd:
+                continue
+            
+            parts = cmd.split()
+            command = parts[0].lower()
+            
+            if command in ['quit', 'exit']:
+                break
+            elif command == 'help':
+                print("Commands: help, hand, state, pass, concede, cast, land, attack, block, list, quit")
+            elif command == 'hand':
+                hand = client.game_state.get('hand', [])
+                print(f"Hand ({len(hand)} cards):")
+                for i, card_id in enumerate(hand):
+                    from card_catalog import get_card
+                    card = get_card(card_id)
+                    name = card.get('name') if card else card_id
+                    print(f"  {i+1}. {name}")
+            elif command == 'state':
+                print(json.dumps(client.game_state, indent=2))
+            elif command == 'pass':
+                client.pass_priority()
+                print("Passed priority")
+            elif command == 'concede':
+                client.send_concede()
+                print("Conceded game")
+            elif command == 'list':
+                print_card_summary()
+            elif command == 'cast' and len(parts) >= 2:
+                card_id = parts[1]
+                targets = parts[2:] if len(parts) > 2 else []
+                mana_payment = {'R': 1}
+                client.send_cast_spell(card_id, targets, mana_payment)
+                print(f"Casting {card_id}")
+            elif command == 'land' and len(parts) >= 2:
+                card_id = parts[1]
+                client.send_play_land(card_id)
+                print(f"Playing land {card_id}")
+            elif command == 'attack' and len(parts) >= 2:
+                creature_id = parts[1]
+                target = parts[2] if len(parts) > 2 else None
+                attackers = [{"creature_id": creature_id, "target": target or "player_2"}]
+                client.send_declare_attackers(attackers)
+                print(f"Declared {creature_id} as attacker")
+            elif command == 'block' and len(parts) >= 3:
+                creature_id = parts[1]
+                blocking_id = parts[2]
+                blockers = [{"creature_id": creature_id, "blocking_id": blocking_id}]
+                client.send_declare_blockers(blockers)
+                print(f"Declared {creature_id} blocking {blocking_id}")
+            else:
+                print(f"Unknown command: {command}")
+
+    except KeyboardInterrupt:
+        pass
+
+
+def run_spectator(host, port, verbose):
+    """Run spectator mode."""
+    client = SpectatorClient(host=host, port=port, verbose=verbose)
+    client.connect()
+    client.log("Spectator mode - watching game")
+    
+    try:
+        while client.running:
+            cmd = input("\n[spectator] > ").strip()
+            if not cmd:
+                continue
+            
+            parts = cmd.split()
+            command = parts[0].lower()
+            
+            if command in ['quit', 'exit']:
+                break
+            elif command == 'state':
+                print(json.dumps(client.game_state, indent=2))
+            elif command == 'history':
+                history = client.get_history()
+                print(f"History: {len(history)} events")
+            elif command == 'save' and len(parts) >= 2:
+                client.save_history(parts[1])
+            elif command == 'load' and len(parts) >= 2:
+                client.load_history(parts[1])
+            elif command == 'replay':
+                client.replay()
+            elif command == 'help':
+                print("Commands: help, state, history, save <file>, load <file>, replay, quit")
+    except KeyboardInterrupt:
+        pass
+    finally:
+        client.close()
+
+
+def main():
+    parser = argparse.ArgumentParser(description='MTGNP Implementation with Bonus Features')
+    parser.add_argument('mode', choices=['server', 'client', 'spectator'], nargs='?',
+                       help='Run as server, client, or spectator')
+    parser.add_argument('--host', default='localhost', help='Server host')
+    parser.add_argument('--port', type=int, default=DEFAULT_PORT, help='Port')
+    parser.add_argument('--verbose', '-v', action='store_true', help='Enable verbose mode')
+    parser.add_argument('--player', help='Player ID (client mode)')
+    parser.add_argument('--deck', nargs='+', help='Deck list (client mode)')
+    parser.add_argument('--list-cards', action='store_true', help='List available cards')
+    parser.add_argument('--log-file', help='Log file for game events')
+
+    args = parser.parse_args()
+
+    if args.list_cards:
+        print_card_summary()
+        return
+
+    if not args.mode:
+        parser.print_help()
+        return
+
+    if args.mode == 'server':
+        server = MTGNPServer(port=args.port, verbose=args.verbose)
+        if args.log_file:
+            server.game.game_logger = GameLogger()
+        try:
+            server.start()
+        except KeyboardInterrupt:
+            print("\nServer stopped")
+    elif args.mode == 'spectator':
+        run_spectator(args.host, args.port, args.verbose)
+    else:
+        client = MTGNPClient(host=args.host, port=args.port, verbose=args.verbose)
+        client.connect()
+
+        if args.player and args.deck:
+            client.send_player_ready(args.player, args.deck)
+            print(f"Player {args.player} ready with {len(args.deck)} cards")
+
+        run_client_interactive(client)
+        client.close()
+
+
+if __name__ == '__main__':
+    main()
