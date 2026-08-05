@@ -116,16 +116,6 @@ python -m mtgnp client --list-cards
 | `replay` | Replay game |
 | `quit`/`exit` | Exit spectator |
 
-## Bonus Features
-
-| Feature | Points | File |
-|---------|--------|------|
-| Full Card Effects | 10 | `card_effects.py` |
-| Triggered Abilities | 5 | `triggers.py` |
-| Spectator Client | 5 | `spectator.py` |
-| Game Logging/Replay | 5 | `game_logger.py` |
-| Interactive UI | 5 | `client.py`, `main.py` |
-
 ## Requirements
 
 - Python lol what did u expect hashsasha
