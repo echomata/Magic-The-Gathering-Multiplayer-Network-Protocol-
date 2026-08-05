@@ -128,7 +128,7 @@ python -m mtgnp client --list-cards
 
 ## Requirements
 
-- Python 3.7+
+- Python lol what did u expect hashsasha
 - No external dependencies (uses only Python standard library)
 
 ## Project Statistics
