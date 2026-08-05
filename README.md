@@ -63,33 +63,52 @@ mtgnp/
 
 ## Running the Project
 
+### Prerequisites
+
+- Python lol obv what did u expect?? hshshs
+- No external dependencies (uses only Python standard library)
+
+### Setup
+
+Navigate to the project directory:
+```bash
+cd "C:\Users\Paul\Codes\CSNETWK MP"
+```
+
 ### Start Server
 ```bash
-python -m mtgnp server --verbose
-python -m mtgnp server --verbose --log-file game.log
+python launcher.py server --port 4444 --verbose
+python launcher.py server --port 4444 --verbose --log-file game.log
 ```
 
 ### Start Client (Player 1)
 ```bash
-python -m mtgnp client --player player_1 --deck lightning_bolt_001 lightning_bolt_002 shock_001 mountain_001 mountain_002 goblin_guide_001 --verbose
+python launcher.py client --host localhost --port 4444 --player player_1 --deck lightning_bolt_001 lightning_bolt_002 shock_001 mountain_001 mountain_002 goblin_guide_001 --verbose
 ```
 
 ### Start Client (Player 2)
 ```bash
-python -m mtgnp client --player player_2 --deck counterspell_001 island_001 swamp_001 gray_merchant_001 mountain_003 shock_002 --verbose
+python launcher.py client --host localhost --port 4444 --player player_2 --deck counterspell_001 island_001 swamp_001 gray_merchant_001 mountain_003 shock_002 --verbose
 ```
 
 ### Start Spectator
 ```bash
-python -m mtgnp spectator --verbose
+python launcher.py spectator --host localhost --port 4444 --verbose
 ```
 
 ### List Available Cards
 ```bash
-python -m mtgnp client --list-cards
+python launcher.py --list-cards
 ```
 
-## Client Commands
+### Deck Requirements
+
+- Minimum deck size: 1 card
+- Maximum deck size: 50 cards
+- Cards must be valid card IDs from the catalog
+- See full card list with `--list-cards`
+
+### Client Commands
 
 | Command | Description |
 |---------|-------------|
@@ -115,11 +134,6 @@ python -m mtgnp client --list-cards
 | `load <file>` | Load history from file |
 | `replay` | Replay game |
 | `quit`/`exit` | Exit spectator |
-
-## Requirements
-
-- Python lol what did u expect hashsasha
-- No external dependencies (uses only Python standard library)
 
 ## Project Statistics
 
