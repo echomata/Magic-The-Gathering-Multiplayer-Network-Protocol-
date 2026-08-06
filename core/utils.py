@@ -3,7 +3,7 @@ import random
 import time
 from typing import List, Optional
 
-from card_catalog import get_card, is_creature, is_land
+from game.card_catalog import get_card, is_creature, is_land
 
 
 def shuffle_deck(deck: List[str]) -> List[str]:
@@ -34,14 +34,14 @@ def check_mana(payment: dict, cost: dict) -> bool:
     """Check if mana payment satisfies cost."""
     # Check colored mana
     for color, amount in cost.items():
-        if color == 'generic':
+        if color == 'X':
             continue
         if payment.get(color, 0) < amount:
             return False
     
     # Check generic mana
-    generic_needed = cost.get('generic', 0)
-    generic_paid = payment.get('generic', 0)
+    generic_needed = cost.get('X', 0)
+    generic_paid = payment.get('X', 0)
     if generic_paid < generic_needed:
         return False
     

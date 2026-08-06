@@ -1,7 +1,8 @@
 """Data models for MTGNP game state."""
 from typing import Dict, Optional
 
-from card_catalog import get_card, is_creature, card_has_haste, card_has_first_strike
+from game.card_catalog import get_card, is_creature, card_has_haste, card_has_first_strike
+from core.utils import generate_stack_id
 
 
 class Permanent:
@@ -92,18 +93,12 @@ class StackItem:
     """Represents an item on the stack."""
     
     def __init__(self, card_id: str, controller: str, targets: list = None):
-        self.stack_item_id = f"stk_{id(self)}"
+        self.stack_item_id = generate_stack_id()
         self.card_id = card_id
         self.controller = controller
         self.targets = targets or []
         self.item_type = "SPELL"
         self.trigger_data = None
-        
-        card = get_card(card_id)
-        if card:
-            card_type = card.get('type')
-            if card_type in ['Creature', 'Artifact Creature', 'Enchantment', 'Artifact']:
-                self.item_type = "PERMANENT"
         self.resolved = False
 
     def to_pdu(self) -> Dict:

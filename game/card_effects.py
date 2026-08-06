@@ -1,8 +1,8 @@
 """Complete card effect implementations for MTGNP."""
 from typing import Dict, List, Optional, Any
-from card_catalog import get_card, is_creature, is_land, is_permanent, is_artifact, is_enchantment
-from models import Permanent
-from utils import generate_permanent_id
+from game.card_catalog import get_card, is_creature, is_land, is_permanent, is_artifact, is_enchantment
+from core.models import Permanent
+from core.utils import generate_permanent_id
 
 
 class CardEffect:

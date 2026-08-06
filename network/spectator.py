@@ -2,7 +2,7 @@
 import time
 from typing import Dict
 
-from client import MTGNPClient
+from network.client import MTGNPClient
 
 
 class SpectatorClient(MTGNPClient):

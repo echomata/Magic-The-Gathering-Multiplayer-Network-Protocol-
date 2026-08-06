@@ -4,12 +4,12 @@ import sys
 import json
 import os
 
-from constants import DEFAULT_PORT
-from server import MTGNPServer
-from client import MTGNPClient
-from spectator import SpectatorClient
-from card_catalog import list_available_cards
-from game_logger import GameLogger
+from core.constants import DEFAULT_PORT
+from network.server import MTGNPServer
+from network.client import MTGNPClient
+from network.spectator import SpectatorClient
+from game.card_catalog import list_available_cards
+from core.game_logger import GameLogger
 
 
 def print_card_summary():
@@ -46,6 +46,7 @@ def run_client_interactive(client):
     print("  land <card>  - Play a land")
     print("  attack <id> [target] - Declare attacker")
     print("  block <id> <attacker> - Declare blocker")
+    print("  discard <id1> [id2...] - Discard cards")
     print("  list         - List available cards")
     print("  quit/exit    - Exit client")
     print()
@@ -67,7 +68,7 @@ def run_client_interactive(client):
                 hand = client.game_state.get('hand', [])
                 print(f"Hand ({len(hand)} cards):")
                 for i, card_id in enumerate(hand):
-                    from card_catalog import get_card
+                    from game.card_catalog import get_card
                     card = get_card(card_id)
                     name = card.get('name') if card else card_id
                     print(f"  {i+1}. {name}")
@@ -103,6 +104,10 @@ def run_client_interactive(client):
                 blockers = [{"creature_id": creature_id, "blocking_id": blocking_id}]
                 client.send_declare_blockers(blockers)
                 print(f"Declared {creature_id} blocking {blocking_id}")
+            elif command == 'discard' and len(parts) >= 2:
+                card_ids = parts[1:]
+                client.send_discard(card_ids)
+                print(f"Discarding {card_ids}")
             else:
                 print(f"Unknown command: {command}")
 

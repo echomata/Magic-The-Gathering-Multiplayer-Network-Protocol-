@@ -1,11 +1,12 @@
 """Main game class orchestrating all game components."""
+from typing import Dict
 from game.state import GameState
 from game.turn import TurnEngine
 from game.combat import CombatSystem
 from game.priority import PriorityManager
 from game.actions import ActionHandler
 from game.lifecycle import LifecycleManager
-from triggers import TriggerManager
+from game.triggers import TriggerManager
 
 
 class Game:
@@ -60,7 +61,7 @@ class Game:
         """Find a permanent by ID."""
         return self.state_manager.find_permanent(perm_id)
 
-    def remove_permanent(self, perm_id: str):
+    def remove_permanent(self, perm_id: str) -> bool:
         """Remove a permanent from the game."""
         return self.state_manager.remove_permanent(perm_id)
 
@@ -88,6 +89,10 @@ class Game:
     def send_error(self, conn, code: str, message: str, rejected_action: Dict = None):
         """Send an ERROR PDU."""
         self.server.send_error(conn, code, message, rejected_action)
+        
+        player_id = self.get_player_by_conn(conn)
+        if player_id and hasattr(self, 'priority_manager') and self.priority_manager and self.priority_manager.priority_holder == player_id:
+            self.priority_manager.regrant_priority(player_id)
 
     def build_game_state(self, player_id: str) -> Dict:
         """Build a personalized GAME_STATE_UPDATE for a player."""

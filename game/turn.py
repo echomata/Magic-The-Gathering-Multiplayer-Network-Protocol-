@@ -1,7 +1,7 @@
 """Turn and phase engine."""
 from typing import Dict
-from models import Permanent
-from utils import generate_permanent_id
+from core.models import Permanent
+from core.utils import generate_permanent_id
 
 
 class TurnEngine:
@@ -36,6 +36,7 @@ class TurnEngine:
                     perm._temporary_bonus = {'power': 0, 'toughness': 0}
                     perm._pacified = False
                     perm._protected = False
+                    perm.summoning_sick = False
 
         self.game.land_played_this_turn = False
         self.game.floating_mana = {}
@@ -59,7 +60,7 @@ class TurnEngine:
 
         self.game.broadcast_phase_transition("UPKEEP", "DRAW")
 
-        if not (self.game.turn == 1 and self.game.active_player == list(self.game.players.keys())[0]):
+        if self.game.turn != 1:
             data = self.game.players[self.game.active_player]
             if not data['library']:
                 self.game.lifecycle_manager.end_game(

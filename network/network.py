@@ -4,7 +4,7 @@ import json
 import struct
 from typing import Dict, Optional
 
-from constants import MAX_PDU_SIZE
+from core.constants import MAX_PDU_SIZE
 
 
 def encode_message(pdu: Dict) -> bytes:

@@ -1,9 +1,9 @@
 """Game lifecycle management: LOBBY, SETUP, MULLIGAN, GAME_OVER."""
 import random
 from typing import Dict
-from constants import INITIAL_LIFE, HAND_SIZE, MIN_DECK_SIZE, MAX_DECK_SIZE
-from models import Permanent
-from utils import generate_permanent_id
+from core.constants import INITIAL_LIFE, HAND_SIZE, MIN_DECK_SIZE, MAX_DECK_SIZE
+from core.models import Permanent
+from core.utils import generate_permanent_id
 
 
 class LifecycleManager:
@@ -26,9 +26,14 @@ class LifecycleManager:
             self.game.send_error(conn, "ILLEGAL_ACTION", "Invalid player_id", pdu)
             return
 
-        if player_id in self.game.players:
+        existing_pid = self.game.get_player_by_conn(conn)
+        if player_id in self.game.players and self.game.players[player_id]['conn'] != conn:
             self.game.send_error(conn, "DUPLICATE_ID", f"Player ID '{player_id}' already claimed", pdu)
             return
+
+        # If connection changes ID, remove old ID
+        if existing_pid and existing_pid != player_id:
+            del self.game.players[existing_pid]
 
         deck_list = pdu.get('deck_list', [])
         if not isinstance(deck_list, list):
@@ -40,7 +45,7 @@ class LifecycleManager:
                                f"Deck must have {MIN_DECK_SIZE}-{MAX_DECK_SIZE} cards", pdu)
             return
 
-        from card_catalog import is_legal_card
+        from game.card_catalog import is_legal_card
         for card_id in deck_list:
             if not is_legal_card(card_id):
                 self.game.send_error(conn, "ILLEGAL_DECK", f"Unknown card: {card_id}", pdu)

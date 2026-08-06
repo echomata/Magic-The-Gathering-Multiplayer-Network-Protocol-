@@ -1,7 +1,7 @@
 """Triggered ability handling for MTGNP."""
 from typing import Dict, List, Optional, Any
-from card_catalog import get_card, is_creature
-from models import StackItem
+from game.card_catalog import get_card, is_creature
+from core.models import StackItem
 
 
 class TriggerManager:

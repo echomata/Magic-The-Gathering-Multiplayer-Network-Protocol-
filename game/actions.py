@@ -1,11 +1,11 @@
 """Player action handlers."""
 from typing import Dict
-from models import Permanent, StackItem
-from card_catalog import (
+from core.models import Permanent, StackItem
+from game.card_catalog import (
     get_card, is_land, is_permanent, can_play_during_phase,
     is_creature
 )
-from utils import generate_permanent_id, check_mana
+from core.utils import generate_permanent_id, check_mana
 
 
 class ActionHandler:
@@ -14,6 +14,47 @@ class ActionHandler:
     def __init__(self, game):
         self.game = game
         self.waiting_for_discard = None
+
+    def handle_discard(self, conn, pdu: Dict):
+        """Handle DISCARD PDU."""
+        if self.game.state != "IN_GAME" or self.game.phase != "CLEANUP":
+            self.game.send_error(conn, "WRONG_PHASE", "Can only discard in Cleanup step", pdu)
+            return
+
+        player_id = self.game.get_player_by_conn(conn)
+        if not player_id or player_id != self.waiting_for_discard:
+            self.game.send_error(conn, "ILLEGAL_ACTION", "Not your turn to discard", pdu)
+            return
+
+        card_ids = pdu.get('card_ids', [])
+        hand = self.game.players[player_id]['hand']
+        
+        if len(hand) - len(card_ids) > 7:
+            self.game.send_error(conn, "ILLEGAL_ACTION", f"Must discard down to 7 cards. Discarding {len(card_ids)} is not enough.", pdu)
+            return
+
+        # Verify all cards are in hand
+        for card_id in card_ids:
+            if card_id not in hand:
+                self.game.send_error(conn, "ILLEGAL_ACTION", f"Card {card_id} not in hand", pdu)
+                return
+
+        # Execute discard
+        for card_id in card_ids:
+            hand.remove(card_id)
+            self.game.players[player_id]['graveyard'].append(card_id)
+
+        self.game.log(f"Player {player_id} discarded {len(card_ids)} cards")
+        self.waiting_for_discard = None
+        
+        # Cleanup continues
+        for pid, pdata in self.game.players.items():
+            for perm in pdata.get('battlefield', []):
+                perm.damage = 0
+                perm._temporary_bonus = {'power': 0, 'toughness': 0}
+
+        self.game.broadcast_game_state()
+        self.game.turn_engine.end_turn()
 
     def handle_cast_spell(self, conn, pdu: Dict):
         """Handle CAST_SPELL PDU."""
@@ -56,20 +97,7 @@ class ActionHandler:
 
         self.game.players[player_id]['hand'].remove(card_id)
 
-        kicked = False
-        if 'kicker' in card.get('abilities', []):
-            kicked = True
-
-        if is_permanent(card):
-            perm = Permanent(card_id, player_id, generate_permanent_id(), self.game.turn)
-            self.game.players[player_id]['battlefield'].append(perm)
-            self.game.log(f"Permanent {card_id} entered battlefield")
-            
-            self.game.trigger_manager.check_triggers('ETB', {'permanent': perm, 'kicked': kicked})
-            
-            self.game.broadcast_game_state()
-            self.game.priority_manager.open_priority_window()
-            return
+        # All spells, including permanents, go on the stack
 
         stack_item = StackItem(card_id, player_id, pdu.get('targets', []))
         self.game.stack.append(stack_item)

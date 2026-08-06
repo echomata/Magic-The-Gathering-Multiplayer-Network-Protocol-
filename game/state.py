@@ -1,7 +1,7 @@
 """Game state management."""
 from typing import Dict, List, Optional, Any
-from models import Permanent
-from card_catalog import get_card
+from core.models import Permanent
+from game.card_catalog import get_card
 
 
 class GameState:
@@ -48,7 +48,7 @@ class GameState:
                     return perm
         return None
 
-    def remove_permanent(self, perm_id: str):
+    def remove_permanent(self, perm_id: str) -> bool:
         """Remove a permanent from the game."""
         for pid, data in self.game.players.items():
             for i, perm in enumerate(data.get('battlefield', [])):
@@ -58,7 +58,8 @@ class GameState:
                     # Trigger death triggers
                     if self.game.trigger_manager:
                         self.game.trigger_manager.check_triggers('DEATH', {'creature': perm_id})
-                    return
+                    return True
+        return False
 
     def get_devotion(self, player_id: str, color: str) -> int:
         """Calculate devotion to a color for a player."""
@@ -71,11 +72,15 @@ class GameState:
         return devotion
 
     def build_state_dict(self, player_id: str) -> Dict:
-        """Build a personalized GAME_STATE_UPDATE for a player."""
+        """Build a personalized GAME_STATE_UPDATE for a player.
+        
+        Each player sees their own hand but only the opponent's hand count.
+        All other zones (battlefield, graveyard, stack) are public.
+        """
         state = {
-            "turn": self.turn,
-            "phase": self.phase,
-            "active_player": self.active_player,
+            "turn": self.game.turn,
+            "phase": self.game.phase,
+            "active_player": self.game.active_player,
             "life_totals": {},
             "hand": [],
             "hand_counts": {},
@@ -83,7 +88,7 @@ class GameState:
             "battlefield": {},
             "graveyard": {},
             "stack": [],
-            "land_played": self.land_played_this_turn
+            "land_played_this_turn": self.game.land_played_this_turn
         }
 
         for pid, data in self.game.players.items():
@@ -105,17 +110,20 @@ class GameState:
         for pid, data in self.game.players.items():
             state["graveyard"][pid] = data.get('graveyard', [])[:]
 
-        state["stack"] = [item.to_pdu() for item in self.stack]
+        state["stack"] = [item.to_pdu() for item in self.game.stack]
 
         if self.game.priority_manager and self.game.priority_manager.priority_holder:
             state["priority_holder"] = self.game.priority_manager.priority_holder
+        else:
+            state["priority_holder"] = None
 
         return state
 
-def reset(self):
-        """Reset game state."""
+    def reset(self):
+        """Reset game state for a new game, keeping TCP connections alive."""
         self.game.players = {}
-        self.game.player_conns = []
+        # NOTE: Do NOT clear player_conns — RFC requires TCP connections
+        # to be retained after GAME_OVER for session restart.
         self.game.turn = 0
         self.game.active_player = None
         self.game.phase = None

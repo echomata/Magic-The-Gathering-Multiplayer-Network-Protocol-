@@ -5,9 +5,9 @@ import threading
 import time
 from typing import Dict, List, Optional
 
-from constants import DEFAULT_PORT, PING_INTERVAL
-from network import encode_message, decode_message, send_pdu
-from card_catalog import get_card, list_available_cards
+from core.constants import DEFAULT_PORT, PING_INTERVAL
+from network.network import encode_message, decode_message, send_pdu
+from game.card_catalog import get_card, list_available_cards
 
 
 class MTGNPClient:
@@ -80,6 +80,9 @@ class MTGNPClient:
         """Handle incoming PDU."""
         if self.verbose:
             print(f"[CLIENT <- SERVER] {json.dumps(pdu, indent=2)}")
+
+        if 'seq_num' in pdu:
+            self.seq_num = pdu['seq_num']
 
         pdu_type = pdu.get('type')
 
@@ -259,9 +262,39 @@ class MTGNPClient:
         }
         self.send_pdu(pdu)
 
+    def send_discard(self, card_ids: list):
+        """Send a DISCARD PDU."""
+        pdu = {
+            "type": "DISCARD",
+            "seq_num": self.seq_num,
+            "card_ids": card_ids
+        }
+        self.send_pdu(pdu)
+
+    def send_activate_ability(self, permanent_id: str, ability_index: int, targets: list = None, mana_payment: dict = None):
+        """Send ACTIVATE_ABILITY PDU."""
+        pdu = {
+            "type": "ACTIVATE_ABILITY",
+            "seq_num": self._last_priority_seq,
+            "permanent_id": permanent_id,
+            "ability_index": ability_index,
+            "targets": targets or [],
+            "mana_payment": mana_payment or {}
+        }
+        self.send_pdu(pdu)
+
+    def send_assign_damage_order(self, attacker_id: str, blocker_order: list):
+        """Send ASSIGN_DAMAGE_ORDER PDU."""
+        pdu = {
+            "type": "ASSIGN_DAMAGE_ORDER",
+            "seq_num": self._last_priority_seq,
+            "attacker_id": attacker_id,
+            "blocker_order": blocker_order
+        }
+        self.send_pdu(pdu)
+
     def send_concede(self):
         """Send CONCEDE PDU."""
-        self.seq_num += 1
         pdu = {
             "type": "CONCEDE",
             "seq_num": self.seq_num,

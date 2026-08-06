@@ -4,9 +4,9 @@ import threading
 import json
 from typing import Dict, Optional
 
-from constants import DEFAULT_PORT
+from core.constants import DEFAULT_PORT
 from game.game import Game
-from network import send_pdu, decode_message
+from network.network import send_pdu, decode_message
 
 
 class MTGNPServer:
@@ -120,6 +120,7 @@ class MTGNPServer:
             'DECLARE_BLOCKERS': self.game.action_handler.handle_declare_blockers,
             'ASSIGN_DAMAGE_ORDER': self.game.action_handler.handle_assign_damage_order,
             'ACTIVATE_ABILITY': self.game.action_handler.handle_activate_ability,
+            'DISCARD': self.game.action_handler.handle_discard,
             'TRIGGER_ORDER_RESPONSE': self.game.trigger_manager.handle_trigger_order,
             'TRIGGER_CHOICE_RESPONSE': self.game.trigger_manager.handle_trigger_choice,
             'CONCEDE': lambda c, p: self._handle_concede(c, p),
