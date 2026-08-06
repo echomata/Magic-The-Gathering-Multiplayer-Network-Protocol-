@@ -4,71 +4,80 @@
 mtgnp/
 ├── __init__.py          # Package exports
 ├── __main__.py          # Entry point for python -m mtgnp
-├── card_catalog.py      # Complete card definitions (100+ cards)
-├── card_effects.py      # Card effect implementations (25+ effects)
-├── client.py            # Client implementation
-├── constants.py         # Constants and configuration
-├── game_logger.py       # Game logging/replay functionality
 ├── main.py              # CLI entry point
-├── models.py            # Data models (Permanent, StackItem, Player)
-├── network.py           # Network utilities (encoding/decoding)
-├── server.py            # Server implementation
-├── spectator.py         # Spectator client
-├── triggers.py          # Triggered abilities manager
-├── utils.py             # Utility functions
-└── game/
+├── launcher.py          # Script launcher
+├── README.md
+├── core/                # Core models and utilities
+│   ├── __init__.py
+│   ├── constants.py     # Constants and configuration
+│   ├── game_logger.py   # Game logging/replay functionality
+│   ├── models.py        # Data models (Permanent, StackItem, Player)
+│   └── utils.py         # Utility functions
+├── network/             # Networking components
+│   ├── __init__.py
+│   ├── client.py        # Client implementation
+│   ├── network.py       # Network utilities (encoding/decoding)
+│   ├── server.py        # Server implementation
+│   └── spectator.py     # Spectator client
+└── game/                # Game engine logic
     ├── __init__.py      # Game module exports
     ├── actions.py       # Player action handlers
+    ├── card_catalog.py  # Complete card definitions (100+ cards)
+    ├── card_effects.py  # Card effect implementations (25+ effects)
     ├── combat.py        # Combat system
     ├── game.py          # Main game orchestrator
     ├── lifecycle.py     # LOBBY, SETUP, MULLIGAN, GAME_OVER
     ├── priority.py      # Priority and stack management
     ├── state.py         # Game state management
+    ├── triggers.py      # Triggered abilities manager
     └── turn.py          # Turn and phase engine
 ```
 
 ## File Descriptions
 
 ### Root Level Files
-
 | File | Description |
 |------|-------------|
 | `__init__.py` | Package root, exports all public classes |
 | `__main__.py` | Entry point for `python -m mtgnp` |
-| `card_catalog.py` | Complete card catalog with 100+ cards, card lookup functions |
-| `card_effects.py` | All card effect implementations (25+ effects) |
-| `client.py` | MTGNP client - connects to server, sends actions, renders state |
+| `main.py` | CLI entry point with argument parsing |
+| `launcher.py` | Script launcher |
+
+### Core Module (`core/`)
+| File | Description |
+|------|-------------|
 | `constants.py` | All constants (ports, timeouts, phases, error codes) |
 | `game_logger.py` | Game logging, saving, loading, replay functionality |
-| `main.py` | CLI entry point with argument parsing |
 | `models.py` | Data models: `Permanent`, `StackItem`, `Player` |
+| `utils.py` | Utility functions (shuffle, draw, mana checking, etc.) |
+
+### Network Module (`network/`)
+| File | Description |
+|------|-------------|
+| `client.py` | MTGNP client - connects to server, sends actions, renders state |
 | `network.py` | Network utilities: `encode_message`, `decode_message`, `send_pdu` |
 | `server.py` | MTGNP server - handles connections and routes PDUs |
 | `spectator.py` | Read-only spectator client with history/replay |
-| `triggers.py` | Triggered ability manager (ETB, attack, death triggers) |
-| `utils.py` | Utility functions (shuffle, draw, mana checking, etc.) |
 
-### Game Submodule Files
-
+### Game Module (`game/`)
 | File | Description |
 |------|-------------|
-| `game/__init__.py` | Game module exports |
-| `game/actions.py` | Player action handlers (cast spell, play land, declare attackers) |
-| `game/combat.py` | Combat system (damage calculation, resolution) |
-| `game/game.py` | Main game orchestrator - coordinates all sub-systems |
-| `game/lifecycle.py` | Game lifecycle (LOBBY, SETUP, MULLIGAN, GAME_OVER) |
-| `game/priority.py` | Priority and stack management |
-| `game/state.py` | Game state management (players, permanents, state building) |
-| `game/turn.py` | Turn and phase engine (all phases and steps) |
+| `actions.py` | Player action handlers (cast spell, play land, declare attackers, discard) |
+| `card_catalog.py` | Complete card catalog with 100+ cards, card lookup functions |
+| `card_effects.py` | All card effect implementations (25+ effects) |
+| `combat.py` | Combat system (damage calculation, resolution) |
+| `game.py` | Main game orchestrator - coordinates all sub-systems |
+| `lifecycle.py` | Game lifecycle (LOBBY, SETUP, MULLIGAN, GAME_OVER) |
+| `priority.py` | Priority, stack management, SBA loop, and fizzle logic |
+| `state.py` | Game state management (players, permanents, state building) |
+| `triggers.py` | Triggered ability manager (ETB, attack, death triggers) |
+| `turn.py` | Turn and phase engine (all phases and steps) |
 
 ## Running the Project
 
 ### Prerequisites
-
-- Python lol obv what did u expect?? hshshs
+- Python 3.x
 - No external dependencies (uses only Python standard library)
-
-### Setup
 
 ### Start Server
 ```bash
@@ -97,14 +106,12 @@ python launcher.py --list-cards
 ```
 
 ### Deck Requirements
-
 - Minimum deck size: 1 card
 - Maximum deck size: 50 cards
 - Cards must be valid card IDs from the catalog
 - See full card list with `--list-cards`
 
 ### Client Commands
-
 | Command | Description |
 |---------|-------------|
 | `help` | Show available commands |
@@ -116,11 +123,11 @@ python launcher.py --list-cards
 | `land <card_id>` | Play a land |
 | `attack <creature_id> [target]` | Declare attacker |
 | `block <creature_id> <attacker_id>` | Declare blocker |
+| `discard <id1> [id2...]` | Discard cards (used during Cleanup step) |
 | `list` | List available cards |
 | `quit`/`exit` | Exit client |
 
 ## Spectator Commands
-
 | Command | Description |
 |---------|-------------|
 | `state` | Show game state |
@@ -131,10 +138,9 @@ python launcher.py --list-cards
 | `quit`/`exit` | Exit spectator |
 
 ## Project Statistics
-
 - **Total Files**: 22
 - **Card Catalog**: 100+ unique cards
 - **Card Effects**: 25+ implemented
 - **Game Phases**: 14 phases/steps
 - **Error Codes**: 11 defined
-- **PDU Types**: 25 defined
+- **PDU Types**: 26 defined
