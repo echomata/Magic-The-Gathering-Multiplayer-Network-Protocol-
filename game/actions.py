@@ -15,6 +15,64 @@ class ActionHandler:
         self.game = game
         self.waiting_for_discard = None
 
+    def _pay_mana(self, player_id: str, mana_payment: Dict) -> bool:
+        """Verify and tap lands for mana payment, or use floating mana. Return True if successful."""
+        floating = dict(self.game.floating_mana.get(player_id, {}))
+        lands_to_tap = []
+        
+        # Try to satisfy the payment
+        for color, amount in mana_payment.items():
+            if amount <= 0:
+                continue
+                
+            needed = amount
+            
+            # First use floating mana if any
+            if color in floating and floating[color] >= needed:
+                floating[color] -= needed
+                needed = 0
+            elif color in floating and floating[color] > 0:
+                needed -= floating[color]
+                floating[color] = 0
+                
+            if needed == 0:
+                continue
+                
+            # Find untapped lands that produce this color
+            if color != 'X':
+                for perm in self.game.players[player_id].get('battlefield', []):
+                    if not perm.tapped and perm.id not in lands_to_tap:
+                        card = get_card(perm.card_id)
+                        if card and 'mana_' + color in card.get('abilities', []):
+                            lands_to_tap.append(perm.id)
+                            needed -= 1
+                            if needed == 0:
+                                break
+                if needed > 0:
+                    return False
+            else:
+                for perm in self.game.players[player_id].get('battlefield', []):
+                    if not perm.tapped and perm.id not in lands_to_tap:
+                        card = get_card(perm.card_id)
+                        has_mana_ability = any(ab.startswith('mana_') for ab in card.get('abilities', []))
+                        if has_mana_ability:
+                            lands_to_tap.append(perm.id)
+                            needed -= 1
+                            if needed == 0:
+                                break
+                if needed > 0:
+                    return False
+                    
+        # Apply the tap
+        for perm_id in lands_to_tap:
+            perm = self.game.find_permanent(perm_id)
+            if perm:
+                perm.tapped = True
+                
+        # Update floating mana
+        self.game.floating_mana[player_id] = floating
+        return True
+
     def handle_discard(self, conn, pdu: Dict):
         """Handle DISCARD PDU."""
         if self.game.state != "IN_GAME" or self.game.phase != "CLEANUP":
@@ -24,6 +82,10 @@ class ActionHandler:
         player_id = self.game.get_player_by_conn(conn)
         if not player_id or player_id != self.waiting_for_discard:
             self.game.send_error(conn, "ILLEGAL_ACTION", "Not your turn to discard", pdu)
+            return
+
+        if 'seq_num' not in pdu:
+            self.game.send_error(conn, "STALE_ACTION", "Missing seq_num", pdu)
             return
 
         card_ids = pdu.get('card_ids', [])
@@ -93,6 +155,10 @@ class ActionHandler:
         mana_cost = card.get('mana_cost', {})
         if not check_mana(mana_payment, mana_cost):
             self.game.send_error(conn, "INSUFFICIENT_MANA", "Not enough mana", pdu)
+            return
+            
+        if not self._pay_mana(player_id, mana_payment):
+            self.game.send_error(conn, "INSUFFICIENT_MANA", "Cannot pay mana with available sources", pdu)
             return
 
         self.game.players[player_id]['hand'].remove(card_id)
@@ -319,6 +385,25 @@ class ActionHandler:
             return
 
         ability = abilities[ability_index]
+        
+        cost_payment = pdu.get('cost_payment', {})
+        
+        requires_tap = cost_payment.get('tap', False)
+        
+        if ability.startswith('mana_'):
+            requires_tap = True
+            
+        if requires_tap:
+            if perm.tapped:
+                self.game.send_error(conn, "ILLEGAL_ACTION", "Permanent is already tapped", pdu)
+                return
+            perm.tapped = True
+            
+        mana_payment = cost_payment.get('mana', {})
+        if mana_payment:
+            if not self._pay_mana(player_id, mana_payment):
+                self.game.send_error(conn, "INSUFFICIENT_MANA", "Cannot pay mana with available sources", pdu)
+                return
 
         if ability.startswith('mana_'):
             mana = ability[5:]

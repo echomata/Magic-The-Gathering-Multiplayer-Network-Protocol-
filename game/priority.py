@@ -1,4 +1,5 @@
 """Priority and stack management."""
+import threading
 from typing import Dict, Set
 from core.models import StackItem
 from game.card_effects import execute_card_effect
@@ -14,6 +15,15 @@ class PriorityManager:
         self.priority_holder = None
         self.priority_seq = None
         self.passed_players = set()
+        self._timer = None
+
+    def _timeout_callback(self, player_id: str, seq_num: int):
+        """Called when a player fails to respond in time."""
+        if self.priority_holder == player_id and self.priority_seq == seq_num:
+            self.game.log(f"Priority timeout for player {player_id}")
+            self.game.lifecycle_manager.end_game(
+                self.game.get_other_player(player_id), "DISCONNECT"
+            )
 
     def grant_priority(self, player_id: str, keep_passes: bool = False):
         """Grant priority to a player."""
@@ -29,6 +39,11 @@ class PriorityManager:
             "time_limit_ms": 60000
         }
         self.game.send_to_player(player_id, pdu)
+        
+        if self._timer:
+            self._timer.cancel()
+        self._timer = threading.Timer(60.0, self._timeout_callback, args=[player_id, self.priority_seq])
+        self._timer.start()
 
     def regrant_priority(self, player_id: str):
         """Re-grant priority to a player with the SAME seq_num after an error."""
@@ -139,6 +154,7 @@ class PriorityManager:
                 return
 
         self.game.log(f"Resolving stack item: {item.card_id}")
+        state_changes = []
 
         card = get_card(item.card_id)
         if card:
@@ -149,6 +165,7 @@ class PriorityManager:
                     self.game.log(f"Effect error: {result['error']}")
 
                 if result.get('state_changes'):
+                    state_changes.extend(result['state_changes'])
                     for change in result['state_changes']:
                         if change.get('type') == 'DESTROY' or change.get('type') == 'DAMAGE':
                             self.game.trigger_manager.check_triggers('SPELL_RESOLVED', {
@@ -165,17 +182,26 @@ class PriorityManager:
                         self.game.turn
                     )
                     self.game.players[item.controller]['battlefield'].append(perm)
+                    state_changes.append({
+                        "type": "PERMANENT_ENTERS",
+                        "card_id": item.card_id,
+                        "controller": item.controller
+                    })
                     self.game.trigger_manager.check_triggers('ETB', {
                         'permanent': perm,
                         'kicked': False
                     })
+
+        for change in state_changes:
+            if 'type' in change:
+                change['change_type'] = change.pop('type')
 
         pdu = {
             "type": "STACK_RESOLVE",
             "seq_num": self.game.next_seq(),
             "stack_item_id": item.stack_item_id,
             "result": "RESOLVED",
-            "state_changes": []
+            "state_changes": state_changes
         }
         self.game.broadcast(pdu)
 
@@ -190,3 +216,6 @@ class PriorityManager:
         self.priority_holder = None
         self.priority_seq = None
         self.passed_players = set()
+        if self._timer:
+            self._timer.cancel()
+            self._timer = None

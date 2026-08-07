@@ -23,6 +23,7 @@ class MTGNPClient:
         self.running = True
         self.game_state = {}
         self._last_priority_seq = None
+        self.last_pong_time = time.time()
 
     def log(self, msg: str):
         if self.verbose:
@@ -96,6 +97,7 @@ class MTGNPClient:
         elif pdu_type == 'ERROR':
             self.log(f"Error: {pdu.get('code')} - {pdu.get('message')}")
         elif pdu_type == 'PONG':
+            self.last_pong_time = time.time()
             self.log(f"PONG received (seq={pdu.get('seq_num')})")
         elif pdu_type == 'GAME_OVER':
             self.log(f"GAME OVER! Winner: {pdu.get('winner_id')} (reason: {pdu.get('reason')})")
@@ -165,14 +167,27 @@ class MTGNPClient:
         def ping_loop():
             while self.running:
                 time.sleep(PING_INTERVAL)
-                if self.running:
-                    self.seq_num += 1
-                    pdu = {
-                        "type": "PING",
-                        "seq_num": self.seq_num,
-                        "timestamp": int(time.time() * 1000)
-                    }
-                    self.send_pdu(pdu)
+                if not self.running:
+                    break
+                
+                # Check for timeout (e.g. 3 x PING_INTERVAL)
+                if time.time() - self.last_pong_time > PING_INTERVAL * 3:
+                    self.log("Server PONG timeout! Disconnecting...")
+                    self.running = False
+                    if self.socket:
+                        try:
+                            self.socket.close()
+                        except:
+                            pass
+                    break
+
+                self.seq_num += 1
+                pdu = {
+                    "type": "PING",
+                    "seq_num": self.seq_num,
+                    "timestamp": int(time.time() * 1000)
+                }
+                self.send_pdu(pdu)
 
         thread = threading.Thread(target=ping_loop)
         thread.daemon = True
@@ -271,15 +286,15 @@ class MTGNPClient:
         }
         self.send_pdu(pdu)
 
-    def send_activate_ability(self, permanent_id: str, ability_index: int, targets: list = None, mana_payment: dict = None):
+    def send_activate_ability(self, source_id: str, ability_index: int, targets: list = None, cost_payment: dict = None):
         """Send ACTIVATE_ABILITY PDU."""
         pdu = {
             "type": "ACTIVATE_ABILITY",
             "seq_num": self._last_priority_seq,
-            "permanent_id": permanent_id,
+            "source_id": source_id,
             "ability_index": ability_index,
             "targets": targets or [],
-            "mana_payment": mana_payment or {}
+            "cost_payment": cost_payment or {"tap": False, "mana": {}}
         }
         self.send_pdu(pdu)
 

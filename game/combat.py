@@ -119,9 +119,6 @@ class CombatSystem:
         }
         self.game.broadcast(pdu)
 
-        for creature_id in set(creatures_died):
-            self.game.trigger_manager.check_triggers('DEATH', {'creature': creature_id})
-
     def reset(self):
         """Reset combat state."""
         self.attackers = []

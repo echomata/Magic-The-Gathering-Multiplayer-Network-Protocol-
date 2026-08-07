@@ -123,6 +123,10 @@ class LifecycleManager:
             self.game.send_error(conn, "ILLEGAL_ACTION", "Unknown player", pdu)
             return
 
+        if 'seq_num' not in pdu:
+            self.game.send_error(conn, "STALE_ACTION", "Missing seq_num", pdu)
+            return
+
         keep = pdu.get('keep', False)
         cards_to_bottom = pdu.get('cards_to_bottom', [])
 
@@ -191,7 +195,7 @@ class LifecycleManager:
         self.game.state = "LOBBY"
         self.game.phase = "LOBBY"
         self.game.players = {}
-        self.game.player_conns = []
+        # Keep TCP connections for session restart
         self.game.turn = 0
         self.game.active_player = None
         self.game.stack = []
