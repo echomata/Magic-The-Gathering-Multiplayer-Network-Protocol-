@@ -97,18 +97,24 @@ class TriggerManager:
         for trigger in ordered_triggers:
             self._put_trigger_on_stack(trigger)
 
+    def is_waiting(self) -> bool:
+        """Check if server is waiting for a trigger decision."""
+        return self.waiting_for_order is not None or self.waiting_for_choice is not None
+
     def _request_trigger_order(self, player_id: str, triggers: List[Dict]):
         """Request trigger ordering from player."""
         trigger_ids = [t['trigger_id'] for t in triggers]
+        seq_num = self.game.next_seq()
         self.waiting_for_order = {
             'player': player_id,
             'triggers': triggers,
-            'trigger_ids': trigger_ids
+            'trigger_ids': trigger_ids,
+            'seq_num': seq_num
         }
         
         pdu = {
             'type': 'TRIGGER_ORDER',
-            'seq_num': self.game.next_seq(),
+            'seq_num': seq_num,
             'player_id': player_id,
             'trigger_ids': trigger_ids
         }
@@ -121,6 +127,10 @@ class TriggerManager:
         
         player_id = self.game.get_player_by_conn(conn)
         if player_id != self.waiting_for_order['player']:
+            return
+            
+        if pdu.get('seq_num') != self.waiting_for_order['seq_num']:
+            self.game.send_error(conn, "STALE_ACTION", "Stale seq_num", pdu)
             return
         
         ordered_ids = pdu.get('ordered_trigger_ids', [])
@@ -141,6 +151,10 @@ class TriggerManager:
             self._put_trigger_on_stack(trigger)
         
         self.waiting_for_order = None
+        
+        if not self.is_waiting():
+            self.game.broadcast_game_state()
+            self.game.priority_manager.open_priority_window()
 
     def _put_trigger_on_stack(self, trigger: Dict):
         """Put a triggered ability on the stack."""
@@ -163,14 +177,16 @@ class TriggerManager:
 
     def _request_trigger_choice(self, trigger: Dict):
         """Request optional trigger choice from player."""
+        seq_num = self.game.next_seq()
         self.waiting_for_choice = {
             'player': trigger['controller'],
-            'trigger': trigger
+            'trigger': trigger,
+            'seq_num': seq_num
         }
         
         pdu = {
             'type': 'TRIGGER_CHOICE',
-            'seq_num': self.game.next_seq(),
+            'seq_num': seq_num,
             'trigger_id': trigger['trigger_id'],
             'source_id': trigger['permanent_id'],
             'effect_summary': f"Optional trigger: {trigger['card_id']}",
@@ -200,9 +216,17 @@ class TriggerManager:
         player_id = self.game.get_player_by_conn(conn)
         if player_id != self.waiting_for_choice['player']:
             return
+            
+        if pdu.get('seq_num') != self.waiting_for_choice['seq_num']:
+            self.game.send_error(conn, "STALE_ACTION", "Stale seq_num", pdu)
+            return
+            
+        trigger = self.waiting_for_choice['trigger']
+        if pdu.get('trigger_id') != trigger['trigger_id']:
+            self.game.send_error(conn, "TRIGGER_CHOICE_INVALID", "Invalid trigger_id", pdu)
+            return
         
         accept = pdu.get('accept', False)
-        trigger = self.waiting_for_choice['trigger']
         
         if accept:
             # For return from graveyard, need target
@@ -215,8 +239,15 @@ class TriggerManager:
                             player['graveyard'].remove(chosen_target)
                             player['hand'].append(chosen_target)
                             break
-            self._put_trigger_on_stack(trigger)
+            non_optional_trigger = dict(trigger)
+            non_optional_trigger['trigger'] = dict(trigger['trigger'])
+            non_optional_trigger['trigger']['optional'] = False
+            self._put_trigger_on_stack(non_optional_trigger)
         else:
             self.game.log(f"Trigger {trigger['trigger_id']} declined")
         
         self.waiting_for_choice = None
+        
+        if not self.is_waiting():
+            self.game.broadcast_game_state()
+            self.game.priority_manager.open_priority_window()

@@ -263,11 +263,6 @@ class TurnEngine:
     def _handle_attackers_done(self):
         """Handle completion of attackers declaration."""
         if self.game.combat_system.attackers:
-            for attack in self.game.combat_system.attackers:
-                self.game.trigger_manager.check_triggers('ATTACK', {
-                    'attacker': attack.get('creature_id'),
-                    'target': attack.get('target')
-                })
             self.do_declare_blockers()
         else:
             self.do_end_of_combat()

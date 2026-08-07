@@ -217,8 +217,9 @@ class PriorityManager:
         self.check_state_based_actions()
 
         if self.game.state == "IN_GAME":  # Ensure game didn't end from SBA
-            self.game.broadcast_game_state()
-            self.open_priority_window()
+            if not self.game.trigger_manager.is_waiting():
+                self.game.broadcast_game_state()
+                self.open_priority_window()
 
     def reset(self):
         """Reset priority state."""

@@ -106,7 +106,7 @@ class LifecycleManager:
             library = data['deck'][:]
             random.shuffle(library)
             data['library'] = library
-            data['hand'] = [library.pop() for _ in range(HAND_SIZE)]
+            data['hand'] = [library.pop() for _ in range(min(HAND_SIZE, len(library)))]
             data['life'] = INITIAL_LIFE
             data['battlefield'] = []
             data['graveyard'] = []
@@ -136,8 +136,8 @@ class LifecycleManager:
             self.game.send_error(conn, "ILLEGAL_ACTION", "Unknown player", pdu)
             return
 
-        if 'seq_num' not in pdu:
-            self.game.send_error(conn, "STALE_ACTION", "Missing seq_num", pdu)
+        if pdu.get('seq_num') != self.game.players[player_id].get('last_seq_num'):
+            self.game.send_error(conn, "STALE_ACTION", "Stale seq_num", pdu)
             return
 
         keep = pdu.get('keep', False)
@@ -178,7 +178,7 @@ class LifecycleManager:
             library.extend(hand)
             random.shuffle(library)
             hand.clear()
-            hand.extend([library.pop() for _ in range(HAND_SIZE)])
+            hand.extend([library.pop() for _ in range(min(HAND_SIZE, len(library)))])
             data['mulligan_count'] = mulligan_count + 1
 
             self.game.log(f"Player {player_id} took mulligan #{mulligan_count + 1}")

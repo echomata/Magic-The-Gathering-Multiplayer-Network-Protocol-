@@ -264,7 +264,14 @@ class ActionHandler:
         if not self.game.combat_system.attackers:
             self.game.turn_engine.do_end_of_combat()
         else:
-            self.game.priority_manager.open_priority_window()
+            for attack in self.game.combat_system.attackers:
+                self.game.trigger_manager.check_triggers('ATTACK', {
+                    'attacker': attack.get('creature_id'),
+                    'target': attack.get('target')
+                })
+            
+            if not self.game.trigger_manager.is_waiting():
+                self.game.priority_manager.open_priority_window()
 
     def handle_declare_blockers(self, conn, pdu: Dict):
         """Handle DECLARE_BLOCKERS PDU."""

@@ -107,6 +107,8 @@ class Game:
             "state": state
         }
         self.send_to_player(player_id, pdu)
+        if player_id in self.players:
+            self.players[player_id]['last_seq_num'] = pdu['seq_num']
         return pdu['seq_num']
 
     def broadcast_game_state(self):

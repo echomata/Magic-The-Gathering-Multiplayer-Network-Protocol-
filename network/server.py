@@ -146,13 +146,12 @@ class MTGNPServer:
 
     def _handle_ping(self, conn, pdu: Dict):
         """Handle PING PDU."""
-        import time
-        pdu = {
+        pong_pdu = {
             "type": "PONG",
             "seq_num": pdu.get('seq_num', 0),
-            "timestamp": pdu.get('timestamp', int(time.time() * 1000))
+            "timestamp": pdu.get('timestamp', 0)
         }
-        self.send_pdu(conn, pdu)
+        self.send_pdu(conn, pong_pdu)
 
     def _handle_client_disconnect(self, conn):
         """Handle client disconnection."""
