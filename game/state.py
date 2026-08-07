@@ -88,7 +88,7 @@ class GameState:
             "battlefield": {},
             "graveyard": {},
             "stack": [],
-            "land_played": self.game.land_played_this_turn
+            "land_played_this_turn": self.game.land_played_this_turn
         }
 
         for pid, data in self.game.players.items():

@@ -43,10 +43,14 @@ def run_client_interactive(client):
     print("  pass         - Pass priority")
     print("  concede      - Concede the game")
     print("  cast <card> [targets...] - Cast a spell")
+    print("  activate <source_id> <ability_index> [targets...] - Activate ability")
     print("  land <card>  - Play a land")
     print("  attack <id> [target] - Declare attacker")
     print("  block <id> <attacker> - Declare blocker")
+    print("  order_damage <attacker_id> <blocker_id>... - Assign damage order")
     print("  discard <id1> [id2...] - Discard cards")
+    print("  mulligan keep [id1...] - Keep hand (bottom N cards)")
+    print("  mulligan redraw        - Take a mulligan")
     print("  trigger order <id1> <id2>... - Order triggers")
     print("  trigger keep [target]        - Keep optional trigger")
     print("  trigger decline              - Decline optional trigger")
@@ -66,7 +70,7 @@ def run_client_interactive(client):
             if command in ['quit', 'exit']:
                 break
             elif command == 'help':
-                print("Commands: help, hand, state, pass, concede, cast, land, attack, block, discard, trigger, list, quit")
+                print("Commands: help, hand, state, pass, concede, mulligan, cast, activate, land, attack, block, order_damage, discard, trigger, list, quit")
             elif command == 'hand':
                 hand = client.game_state.get('hand', [])
                 print(f"Hand ({len(hand)} cards):")
@@ -85,12 +89,30 @@ def run_client_interactive(client):
                 print("Conceded game")
             elif command == 'list':
                 print_card_summary()
+            elif command == 'mulligan' and len(parts) >= 2:
+                subcommand = parts[1].lower()
+                if subcommand == 'keep':
+                    cards_to_bottom = parts[2:] if len(parts) > 2 else []
+                    client.send_mulligan_choice(True, cards_to_bottom)
+                    print(f"Keeping hand, bottoming: {cards_to_bottom}")
+                elif subcommand == 'redraw':
+                    client.send_mulligan_choice(False)
+                    print("Taking a mulligan")
+                else:
+                    print("Usage: mulligan keep [card_ids...] OR mulligan redraw")
             elif command == 'cast' and len(parts) >= 2:
                 card_id = parts[1]
                 targets = parts[2:] if len(parts) > 2 else []
                 mana_payment = {'R': 1}
                 client.send_cast_spell(card_id, targets, mana_payment)
                 print(f"Casting {card_id}")
+            elif command == 'activate' and len(parts) >= 3:
+                source_id = parts[1]
+                ability_index = int(parts[2])
+                targets = parts[3:] if len(parts) > 3 else []
+                cost_payment = {"tap": False, "mana": {}} 
+                client.send_activate_ability(source_id, ability_index, targets, cost_payment)
+                print(f"Activating ability {ability_index} on {source_id}")
             elif command == 'land' and len(parts) >= 2:
                 card_id = parts[1]
                 client.send_play_land(card_id)
@@ -107,6 +129,11 @@ def run_client_interactive(client):
                 blockers = [{"creature_id": creature_id, "blocking_id": blocking_id}]
                 client.send_declare_blockers(blockers)
                 print(f"Declared {creature_id} blocking {blocking_id}")
+            elif command == 'order_damage' and len(parts) >= 3:
+                attacker_id = parts[1]
+                blocker_order = parts[2:]
+                client.send_assign_damage_order(attacker_id, blocker_order)
+                print(f"Assigning damage order for {attacker_id}: {blocker_order}")
             elif command == 'discard' and len(parts) >= 2:
                 card_ids = parts[1:]
                 client.send_discard(card_ids)

@@ -78,13 +78,17 @@ class LifecycleManager:
 
         self.game.log(f"Player {player_id} ready with {len(deck_list)} cards")
 
+        waiting_for = [pid for pid in self.game.players if not self.game.players[pid].get('ready', False)]
+        if len(self.game.players) == 1:
+            waiting_for.append("opponent")
+
         pdu_response = {
             "type": "GAME_STATE_UPDATE",
             "seq_num": self.game.next_seq(),
             "state": {
                 "phase": "LOBBY",
                 "players_ready": len(self.game.players),
-                "waiting_for": [pid for pid in self.game.players if not self.game.players[pid].get('ready', False)]
+                "waiting_for": waiting_for
             }
         }
         self.game.broadcast(pdu_response)

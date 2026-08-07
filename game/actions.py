@@ -420,4 +420,17 @@ class ActionHandler:
             return
 
         self.game.log(f"Activated ability {ability} on {source_id}")
-        self.game.broadcast_game_state()
+        
+        stack_item = StackItem(perm.card_id, player_id, pdu.get('targets', []))
+        stack_item.item_type = "ABILITY"
+        stack_item.card_id = source_id
+        self.game.stack.append(stack_item)
+
+        pdu2 = {
+            "type": "STACK_PUSH",
+            "seq_num": self.game.next_seq(),
+            **stack_item.to_pdu()
+        }
+        self.game.broadcast(pdu2)
+        
+        self.game.priority_manager.grant_priority(player_id)
