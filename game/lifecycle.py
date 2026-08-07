@@ -17,14 +17,23 @@ class LifecycleManager:
 
     def handle_player_ready(self, conn, pdu: Dict):
         """Handle PLAYER_READY PDU."""
-        if self.game.state not in ["LOBBY", "GAME_OVER"]:
-            self.game.send_error(conn, "WRONG_PHASE", "Cannot send PLAYER_READY in current state", pdu)
-            return
-
         player_id = pdu.get('player_id')
         if not player_id or not isinstance(player_id, str):
             self.game.send_error(conn, "ILLEGAL_ACTION", "Invalid player_id", pdu)
             return
+
+        # Reconnect logic during active game
+        if self.game.state not in ["LOBBY", "GAME_OVER"]:
+            if player_id in self.game.players and self.game.players[player_id].get('conn') is None:
+                self.game.players[player_id]['conn'] = conn
+                if conn not in self.game.player_conns:
+                    self.game.player_conns.append(conn)
+                self.game.log(f"Player {player_id} reconnected.")
+                self.game.send_game_state(player_id)
+                return
+            else:
+                self.game.send_error(conn, "WRONG_PHASE", "Cannot send PLAYER_READY in current state", pdu)
+                return
 
         existing_pid = self.game.get_player_by_conn(conn)
         if player_id in self.game.players and self.game.players[player_id]['conn'] != conn:
@@ -69,7 +78,7 @@ class LifecycleManager:
 
         self.game.log(f"Player {player_id} ready with {len(deck_list)} cards")
 
-        pdu = {
+        pdu_response = {
             "type": "GAME_STATE_UPDATE",
             "seq_num": self.game.next_seq(),
             "state": {
@@ -78,7 +87,7 @@ class LifecycleManager:
                 "waiting_for": [pid for pid in self.game.players if not self.game.players[pid].get('ready', False)]
             }
         }
-        self.game.broadcast(pdu)
+        self.game.broadcast(pdu_response)
 
         if len(self.game.players) == 2:
             self.start_game_setup()
@@ -213,6 +222,18 @@ class LifecycleManager:
                 del self.game.players[player_id]
             return
 
-        winner_id = self.game.get_other_player(player_id)
-        if winner_id:
-            self.end_game(winner_id, "DISCONNECT")
+        # Mark as disconnected
+        if player_id in self.game.players:
+            self.game.players[player_id]['conn'] = None
+
+        import threading
+        def timeout_check():
+            if self.game.state not in ["LOBBY", "GAME_OVER"]:
+                if player_id in self.game.players and self.game.players[player_id].get('conn') is None:
+                    winner_id = self.game.get_other_player(player_id)
+                    if winner_id:
+                        self.end_game(winner_id, "DISCONNECT")
+                        
+        timer = threading.Timer(10.0, timeout_check)
+        timer.daemon = True
+        timer.start()

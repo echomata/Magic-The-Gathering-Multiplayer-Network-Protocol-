@@ -24,10 +24,15 @@ class MTGNPClient:
         self.game_state = {}
         self._last_priority_seq = None
         self.last_pong_time = time.time()
+        self.pending_trigger_order = None
+        self.pending_trigger_choice = None
 
     def log(self, msg: str):
         if self.verbose:
             print(f"[CLIENT] {msg}")
+        else:
+            if "[ACTION REQUIRED]" in msg:
+                print(msg)
 
     def connect(self):
         """Connect to the server."""
@@ -94,6 +99,19 @@ class MTGNPClient:
             self._handle_priority(pdu)
         elif pdu_type == 'PHASE_TRANSITION':
             self.log(f"Phase transition: {pdu.get('from_phase')} -> {pdu.get('to_phase')}")
+        elif pdu_type == 'TRIGGER_ORDER':
+            self.pending_trigger_order = pdu
+            self.log(f"\n[ACTION REQUIRED] Trigger Order requested!")
+            self.log(f"Triggers to order: {pdu.get('trigger_ids')}")
+            self.log(f"Type 'trigger order <id1> <id2>...' to respond.")
+        elif pdu_type == 'TRIGGER_CHOICE':
+            self.pending_trigger_choice = pdu
+            self.log(f"\n[ACTION REQUIRED] Trigger Choice: {pdu.get('effect_summary')}")
+            if pdu.get('requires_target'):
+                self.log(f"Legal targets: {pdu.get('legal_targets')}")
+                self.log(f"Type 'trigger keep <target>' or 'trigger decline' to respond.")
+            else:
+                self.log(f"Type 'trigger keep' or 'trigger decline' to respond.")
         elif pdu_type == 'ERROR':
             self.log(f"Error: {pdu.get('code')} - {pdu.get('message')}")
         elif pdu_type == 'PONG':
@@ -307,6 +325,34 @@ class MTGNPClient:
             "blocker_order": blocker_order
         }
         self.send_pdu(pdu)
+
+    def send_trigger_order_response(self, ordered_trigger_ids: List[str]):
+        """Send TRIGGER_ORDER_RESPONSE PDU."""
+        if not self.pending_trigger_order:
+            self.log("No pending trigger order.")
+            return
+        pdu = {
+            "type": "TRIGGER_ORDER_RESPONSE",
+            "seq_num": self.seq_num,
+            "ordered_trigger_ids": ordered_trigger_ids
+        }
+        self.send_pdu(pdu)
+        self.pending_trigger_order = None
+
+    def send_trigger_choice_response(self, accept: bool, chosen_target: str = None):
+        """Send TRIGGER_CHOICE_RESPONSE PDU."""
+        if not self.pending_trigger_choice:
+            self.log("No pending trigger choice.")
+            return
+        pdu = {
+            "type": "TRIGGER_CHOICE_RESPONSE",
+            "seq_num": self.seq_num,
+            "accept": accept
+        }
+        if chosen_target:
+            pdu["chosen_target"] = chosen_target
+        self.send_pdu(pdu)
+        self.pending_trigger_choice = None
 
     def send_concede(self):
         """Send CONCEDE PDU."""

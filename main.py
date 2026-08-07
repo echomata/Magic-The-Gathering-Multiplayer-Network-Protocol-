@@ -47,6 +47,9 @@ def run_client_interactive(client):
     print("  attack <id> [target] - Declare attacker")
     print("  block <id> <attacker> - Declare blocker")
     print("  discard <id1> [id2...] - Discard cards")
+    print("  trigger order <id1> <id2>... - Order triggers")
+    print("  trigger keep [target]        - Keep optional trigger")
+    print("  trigger decline              - Decline optional trigger")
     print("  list         - List available cards")
     print("  quit/exit    - Exit client")
     print()
@@ -63,7 +66,7 @@ def run_client_interactive(client):
             if command in ['quit', 'exit']:
                 break
             elif command == 'help':
-                print("Commands: help, hand, state, pass, concede, cast, land, attack, block, list, quit")
+                print("Commands: help, hand, state, pass, concede, cast, land, attack, block, discard, trigger, list, quit")
             elif command == 'hand':
                 hand = client.game_state.get('hand', [])
                 print(f"Hand ({len(hand)} cards):")
@@ -108,6 +111,21 @@ def run_client_interactive(client):
                 card_ids = parts[1:]
                 client.send_discard(card_ids)
                 print(f"Discarding {card_ids}")
+            elif command == 'trigger' and len(parts) >= 2:
+                subcommand = parts[1].lower()
+                if subcommand == 'order' and len(parts) >= 3:
+                    trigger_ids = parts[2:]
+                    client.send_trigger_order_response(trigger_ids)
+                    print(f"Sent trigger order: {trigger_ids}")
+                elif subcommand == 'keep':
+                    target = parts[2] if len(parts) > 2 else None
+                    client.send_trigger_choice_response(True, target)
+                    print(f"Kept trigger, target: {target}")
+                elif subcommand == 'decline':
+                    client.send_trigger_choice_response(False)
+                    print("Declined trigger")
+                else:
+                    print("Unknown trigger subcommand. Use 'trigger order <ids>', 'trigger keep [target]', or 'trigger decline'")
             else:
                 print(f"Unknown command: {command}")
 

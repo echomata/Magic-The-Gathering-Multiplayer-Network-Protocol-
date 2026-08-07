@@ -107,12 +107,21 @@ class PriorityManager:
         while actions_taken:
             actions_taken = False
             # 1. Players with 0 or less life lose
+            dead_players = []
             for pid, data in list(self.game.players.items()):
                 if data.get('life', 20) <= 0:
+                    dead_players.append(pid)
+                    
+            if dead_players:
+                if len(dead_players) == 2:
+                    # Both players reach zero life simultaneously, AP loses
+                    nap = self.game.get_other_player(self.game.active_player)
+                    self.game.lifecycle_manager.end_game(nap, "LIFE_ZERO")
+                else:
                     self.game.lifecycle_manager.end_game(
-                        self.game.get_other_player(pid), "LIFE_ZERO"
+                        self.game.get_other_player(dead_players[0]), "LIFE_ZERO"
                     )
-                    return
+                return
             
             # 2. Creatures with toughness <= 0 or damage >= toughness die
             creatures_to_destroy = []

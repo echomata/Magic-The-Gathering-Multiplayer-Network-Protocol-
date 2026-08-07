@@ -190,6 +190,10 @@ class ActionHandler:
             self.game.send_error(conn, "ILLEGAL_ACTION", "Unknown player", pdu)
             return
 
+        if player_id != self.game.active_player:
+            self.game.send_error(conn, "ILLEGAL_ACTION", "Only the active player can play lands", pdu)
+            return
+
         if self.game.land_played_this_turn:
             self.game.send_error(conn, "ILLEGAL_ACTION", "Already played a land this turn", pdu)
             return
