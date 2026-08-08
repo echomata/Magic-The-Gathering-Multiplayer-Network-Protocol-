@@ -4,7 +4,7 @@ import threading
 import json
 from typing import Dict, Optional
 
-from core.constants import DEFAULT_PORT
+from core.constants import DEFAULT_PORT, MAX_PDU_SIZE
 from game.game import Game
 from network.network import send_pdu, decode_message
 
@@ -17,6 +17,8 @@ class MTGNPServer:
         self.verbose = verbose
         self.socket = None
         self.game = Game(self, verbose)
+        self.connections = set()
+        self.spectator_conns = set()
         self.running = True
 
     def log(self, msg: str):
@@ -29,9 +31,12 @@ class MTGNPServer:
 
     def send_error(self, conn, code: str, message: str, rejected_action: Dict = None):
         """Send an ERROR PDU."""
+        echoed_seq = (rejected_action or {}).get("seq_num")
+        if not isinstance(echoed_seq, int):
+            echoed_seq = self.game.next_seq()
         pdu = {
             "type": "ERROR",
-            "seq_num": self.game.next_seq(),
+            "seq_num": echoed_seq,
             "code": code,
             "message": message
         }
@@ -55,10 +60,11 @@ class MTGNPServer:
                 conn, addr = self.socket.accept()
                 self.log(f"New connection from {addr}")
 
-                if len(self.game.player_conns) >= 2:
-                    self.log("Refusing connection - game full")
-                    conn.close()
-                    continue
+                self.connections.add(conn)
+                if len(self.connections) > 2:
+                    self.spectator_conns.add(conn)
+                    self.game.spectator_conns.add(conn)
+                    self.log("Accepted spectator connection")
 
                 thread = threading.Thread(target=self._handle_client, args=(conn, addr))
                 thread.daemon = True
@@ -84,6 +90,9 @@ class MTGNPServer:
                 while len(buffer) >= 4:
                     import struct
                     length = struct.unpack('>I', buffer[:4])[0]
+                    if length > MAX_PDU_SIZE:
+                        self.send_error(conn, "INVALID_JSON", "PDU exceeds maximum size")
+                        return
                     if len(buffer) < 4 + length:
                         break
 
@@ -93,7 +102,7 @@ class MTGNPServer:
                     try:
                         pdu = decode_message(message_data)
                         self._route_pdu(conn, pdu)
-                    except json.JSONDecodeError as e:
+                    except (json.JSONDecodeError, UnicodeDecodeError, ValueError) as e:
                         self.log(f"Invalid JSON: {e}")
                         self.send_error(conn, "INVALID_JSON", f"Invalid JSON: {e}")
 
@@ -109,6 +118,14 @@ class MTGNPServer:
             print(f"[SERVER <- {conn.getpeername()}] {json.dumps(pdu, indent=2)}")
 
         pdu_type = pdu.get('type')
+
+        if not isinstance(pdu_type, str) or not isinstance(pdu.get('seq_num'), int):
+            self.send_error(conn, "ILLEGAL_ACTION", "Every PDU requires string type and integer seq_num", pdu)
+            return
+
+        if conn in self.spectator_conns and pdu_type not in {'PING'}:
+            self.send_error(conn, "ILLEGAL_ACTION", "Spectators are read-only", pdu)
+            return
 
         handlers = {
             'PLAYER_READY': self.game.lifecycle_manager.handle_player_ready,
@@ -161,6 +178,9 @@ class MTGNPServer:
 
         if conn in self.game.player_conns:
             self.game.player_conns.remove(conn)
+        self.game.spectator_conns.discard(conn)
+        self.spectator_conns.discard(conn)
+        self.connections.discard(conn)
 
     def shutdown(self):
         """Shutdown the server."""

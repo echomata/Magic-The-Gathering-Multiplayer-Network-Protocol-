@@ -3,7 +3,7 @@ from typing import Dict
 from core.models import Permanent, StackItem
 from game.card_catalog import (
     get_card, is_land, is_permanent, can_play_during_phase,
-    is_creature, is_instant
+    is_creature, is_instant, is_artifact, is_enchantment
 )
 from core.utils import check_mana
 
@@ -118,6 +118,68 @@ class ActionHandler:
         self.game.broadcast_game_state()
         self.game.turn_engine.end_turn()
 
+    def _validate_spell_targets(self, card: Dict, targets: list, player_id: str) -> str:
+        """Validate target count and card-specific target restrictions."""
+        if not isinstance(targets, list):
+            return "targets must be an array"
+
+        effect = card.get('effect')
+        base_id = card.get('base_id', '')
+        needs_target = effect not in {'ponder', 'dark_ritual', 'gray_merchant', 'mana'}
+        if needs_target and len(targets) != 1:
+            return "This spell requires exactly one target"
+        if not needs_target and targets:
+            return "This spell does not accept targets"
+        if not targets:
+            return None
+
+        target = targets[0]
+        perm = self.game.find_permanent(target)
+        target_player = target in self.game.players
+        target_card = perm.card_data if perm else None
+
+        player_only = base_id in {'lava_spike', 'mind_rot'}
+        creature_only = base_id in {
+            'flame_slash', 'unsummon', 'giant_growth', 'vines_of_vastwood',
+            'swords_to_plowshares', 'path_to_exile', 'terror', 'doom_blade',
+            'pacifism'
+        }
+        stack_only = base_id in {'counterspell', 'cancel', 'negate', 'mana_leak'}
+        graveyard_card = base_id in {'raise_dead'}
+        artifact_or_enchantment = base_id in {'naturalize'}
+
+        if stack_only:
+            if not target.startswith('stk_') or not any(i.stack_item_id == target for i in self.game.stack):
+                return "Target is not a spell on the stack"
+            if base_id == 'negate':
+                item = next(i for i in self.game.stack if i.stack_item_id == target)
+                target_card = get_card(item.card_id)
+                if is_creature(target_card):
+                    return "Negate cannot target creature spells"
+            return None
+        if graveyard_card:
+            if not any(target in p.get('graveyard', []) for p in self.game.players.values()):
+                return "Target is not a creature card in a graveyard"
+            target_card = get_card(target)
+            if not target_card or not is_creature(target_card):
+                return "Target is not a creature card"
+            return None
+        if player_only and not target_player:
+            return "This spell can only target a player"
+        if creature_only and (not perm or not is_creature(target_card)):
+            return "This spell must target a creature"
+        if perm and getattr(perm, '_protected', False) and perm.controller != player_id:
+            return "Target has protection"
+        if artifact_or_enchantment and (not perm or not (is_artifact(target_card) or is_enchantment(target_card))):
+            return "This spell must target an artifact or enchantment"
+        if effect in {'deal_damage', 'deal_damage_no_prevent', 'deal_damage_no_regen'} and not (target_player or perm):
+            return "Invalid damage target"
+        if effect == 'healing_salve' and not (target_player or perm):
+            return "Invalid Healing Salve target"
+        if effect == 'mind_rot' and not target_player:
+            return "Mind Rot must target a player"
+        return None
+
     def handle_cast_spell(self, conn, pdu: Dict):
         """Handle CAST_SPELL PDU."""
         if self.game.state != "IN_GAME":
@@ -165,6 +227,11 @@ class ActionHandler:
                 self.game.send_error(conn, "WRONG_PHASE",
                                    "Cannot cast at sorcery speed while the stack is not empty", pdu)
                 return
+
+        target_error = self._validate_spell_targets(card, pdu.get('targets', []), player_id)
+        if target_error:
+            self.game.send_error(conn, "ILLEGAL_TARGET", target_error, pdu)
+            return
 
         mana_payment = pdu.get('mana_payment', {})
         mana_cost = card.get('mana_cost', {})
@@ -284,6 +351,10 @@ class ActionHandler:
                 self.game.send_error(conn, "ILLEGAL_ACTION", f"Invalid creature: {creature_id}", pdu)
                 return
 
+            if any(a.get('creature_id') == creature_id for a in self.game.combat_system.attackers):
+                self.game.send_error(conn, "ILLEGAL_ACTION", "Creature declared more than once", pdu)
+                return
+
             if not perm.can_attack():
                 self.game.send_error(conn, "ILLEGAL_ACTION", f"Creature {creature_id} can't attack", pdu)
                 return
@@ -292,7 +363,8 @@ class ActionHandler:
                 self.game.send_error(conn, "ILLEGAL_TARGET", f"Invalid target: {target}", pdu)
                 return
 
-            perm.tapped = True
+            if not perm.has_vigilance():
+                perm.tapped = True
             self.game.combat_system.attackers.append({"creature_id": creature_id, "target": target})
 
         self.game.log(f"Player {player_id} declared {len(self.game.combat_system.attackers)} attackers")
@@ -327,6 +399,7 @@ class ActionHandler:
             return
 
         self.game.combat_system.blockers = []
+        used_blockers = set()
         for block in pdu.get('blockers', []):
             creature_id = block.get('creature_id')
             blocking_id = block.get('blocking_id')
@@ -335,6 +408,11 @@ class ActionHandler:
             if not perm or perm.controller != player_id:
                 self.game.send_error(conn, "ILLEGAL_ACTION", f"Invalid creature: {creature_id}", pdu)
                 return
+
+            if creature_id in used_blockers:
+                self.game.send_error(conn, "ILLEGAL_ACTION", "A creature can block only once", pdu)
+                return
+            used_blockers.add(creature_id)
 
             if not perm.can_block():
                 self.game.send_error(conn, "ILLEGAL_ACTION", f"Creature {creature_id} can't block", pdu)
@@ -428,13 +506,45 @@ class ActionHandler:
         card = perm.card_data
         abilities = card.get('abilities', [])
 
-        if ability_index >= len(abilities):
+        if not isinstance(ability_index, int) or ability_index < 0 or ability_index >= len(abilities):
             self.game.send_error(conn, "ILLEGAL_ACTION", "Invalid ability index", pdu)
             return
 
         ability = abilities[ability_index]
+        allowed_abilities = {
+            'loot', 'ping', 'ping_artifact', 'mill', 'assassinate',
+            'protection_giver', 'regenerate'
+        }
+        if not ability.startswith('mana_') and ability not in allowed_abilities:
+            self.game.send_error(conn, "ILLEGAL_ACTION", "Ability is not activated by this PDU", pdu)
+            return
         
         cost_payment = pdu.get('cost_payment', {})
+        targets = pdu.get('targets', [])
+        if ability in {'ping', 'ping_artifact', 'assassinate', 'mill', 'protection_giver'} and len(targets) != 1:
+            self.game.send_error(conn, "ILLEGAL_TARGET", "This ability requires exactly one target", pdu)
+            return
+        if ability == 'loot' and targets:
+            self.game.send_error(conn, "ILLEGAL_TARGET", "This ability has no targets", pdu)
+            return
+        if ability == 'mill' and targets[0] not in self.game.players:
+            self.game.send_error(conn, "ILLEGAL_TARGET", "Mill must target a player", pdu)
+            return
+        if ability in {'ping', 'ping_artifact'}:
+            target_perm = self.game.find_permanent(targets[0])
+            if targets[0] not in self.game.players and not target_perm:
+                self.game.send_error(conn, "ILLEGAL_TARGET", "Invalid ping target", pdu)
+                return
+        if ability == 'assassinate':
+            target_perm = self.game.find_permanent(targets[0])
+            if not target_perm or not target_perm.tapped or not is_creature(target_perm.card_data):
+                self.game.send_error(conn, "ILLEGAL_TARGET", "Assassinate must target a tapped creature", pdu)
+                return
+        if ability == 'protection_giver':
+            target_perm = self.game.find_permanent(targets[0])
+            if not target_perm or target_perm.controller != player_id or not is_creature(target_perm.card_data):
+                self.game.send_error(conn, "ILLEGAL_TARGET", "Protection must target your creature", pdu)
+                return
         
         requires_tap = cost_payment.get('tap', False)
         
@@ -465,7 +575,7 @@ class ActionHandler:
 
         self.game.log(f"Activated ability {ability} on {source_id}")
         
-        stack_item = StackItem(perm.card_id, player_id, pdu.get('targets', []))
+        stack_item = StackItem(perm.card_id, player_id, targets)
         stack_item.item_type = "ABILITY"
         stack_item.source_id = source_id
         stack_item.ability = ability

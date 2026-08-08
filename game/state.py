@@ -48,15 +48,15 @@ class GameState:
                     return perm
         return None
 
-    def remove_permanent(self, perm_id: str) -> bool:
-        """Remove a permanent from the game."""
+    def remove_permanent(self, perm_id: str, to_exile: bool = False) -> bool:
+        """Remove a permanent, sending it to graveyard or exile."""
         for pid, data in self.game.players.items():
             for i, perm in enumerate(data.get('battlefield', [])):
                 if perm.id == perm_id:
-                    data['graveyard'].append(perm.card_id)
+                    data.setdefault('exile' if to_exile else 'graveyard', []).append(perm.card_id)
                     data['battlefield'].pop(i)
                     # Trigger death triggers
-                    if self.game.trigger_manager:
+                    if self.game.trigger_manager and not to_exile:
                         self.game.trigger_manager.check_triggers('DEATH', {'creature': perm_id})
                     return True
         return False
@@ -82,11 +82,12 @@ class GameState:
             "phase": self.game.phase,
             "active_player": self.game.active_player,
             "life_totals": {},
-            "hand": [],
+            "hand": {},
             "hand_counts": {},
             "library_counts": {},
             "battlefield": {},
             "graveyard": {},
+            "exile": {},
             "stack": [],
             "land_played_this_turn": self.game.land_played_this_turn
         }
@@ -96,8 +97,11 @@ class GameState:
 
         for pid, data in self.game.players.items():
             if pid == player_id:
-                state["hand"] = data.get('hand', [])[:]
+                state["hand"][pid] = data.get('hand', [])[:]
             else:
+                state["hand_counts"][pid] = len(data.get('hand', []))
+
+            if player_id is None:
                 state["hand_counts"][pid] = len(data.get('hand', []))
 
         for pid, data in self.game.players.items():
@@ -110,6 +114,7 @@ class GameState:
 
         for pid, data in self.game.players.items():
             state["graveyard"][pid] = data.get('graveyard', [])[:]
+            state["exile"][pid] = data.get('exile', [])[:]
 
         state["stack"] = [item.to_pdu() for item in self.game.stack]
 

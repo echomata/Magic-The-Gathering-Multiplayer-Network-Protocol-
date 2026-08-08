@@ -5,7 +5,7 @@ import threading
 import time
 from typing import Dict, List, Optional
 
-from core.constants import DEFAULT_PORT, PING_INTERVAL
+from core.constants import DEFAULT_PORT, PING_INTERVAL, PONG_TIMEOUT, MAX_PDU_SIZE
 from network.network import encode_message, decode_message, send_pdu
 from game.card_catalog import get_card, list_available_cards
 
@@ -66,6 +66,10 @@ class MTGNPClient:
                 while len(buffer) >= 4:
                     import struct
                     length = struct.unpack('>I', buffer[:4])[0]
+                    if length > MAX_PDU_SIZE:
+                        self.log("Incoming PDU exceeds maximum size")
+                        self.running = False
+                        break
                     if len(buffer) < 4 + length:
                         break
 
@@ -75,7 +79,7 @@ class MTGNPClient:
                     try:
                         pdu = decode_message(message_data)
                         self._handle_pdu(pdu)
-                    except json.JSONDecodeError as e:
+                    except (json.JSONDecodeError, UnicodeDecodeError, ValueError) as e:
                         self.log(f"Invalid JSON: {e}")
 
         except Exception as e:
@@ -144,7 +148,11 @@ class MTGNPClient:
         # Per the RFC (10.2.2) and game/state.py, "hand" is an object keyed by
         # player_id (e.g. {"player_1": [...]}), not a flat list. Pull out our
         # own hand specifically.
-        hand = self.game_state.get('hand', {}).get(self.player_id, [])
+        raw_hand = self.game_state.get('hand', {})
+        if isinstance(raw_hand, dict):
+            hand = raw_hand.get(self.player_id, [])
+        else:
+            hand = raw_hand if self.player_id else []
         hand_counts = self.game_state.get('hand_counts', {})
         battlefield = self.game_state.get('battlefield', {})
         stack = self.game_state.get('stack', [])
@@ -194,7 +202,7 @@ class MTGNPClient:
                     break
                 
                 # Check for timeout (e.g. 3 x PING_INTERVAL)
-                if time.time() - self.last_pong_time > PING_INTERVAL * 3:
+                if time.time() - self.last_pong_time > PONG_TIMEOUT:
                     self.log("Server PONG timeout! Disconnecting...")
                     self.running = False
                     if self.socket:

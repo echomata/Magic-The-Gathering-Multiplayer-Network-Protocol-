@@ -43,10 +43,15 @@ def decode_message(data: bytes) -> Dict:
     if len(data) < 4:
         raise ValueError("Incomplete message: missing length prefix")
     length = struct.unpack('>I', data[:4])[0]
+    if length > MAX_PDU_SIZE:
+        raise ValueError(f"Message exceeds max size: {length}")
     if len(data) < 4 + length:
         raise ValueError(f"Incomplete message: expected {length} bytes, got {len(data) - 4}")
     json_str = data[4:4+length].decode('utf-8')
-    return json.loads(json_str)
+    pdu = json.loads(json_str)
+    if not isinstance(pdu, dict):
+        raise ValueError("PDU payload must be a JSON object")
+    return pdu
 
 
 def send_pdu(sock: socket.socket, pdu: Dict, verbose: bool = False) -> bool:

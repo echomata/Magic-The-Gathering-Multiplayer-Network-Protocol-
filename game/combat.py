@@ -112,22 +112,6 @@ class CombatSystem:
         for creature_id in set(creatures_died):
             self.game.remove_permanent(creature_id)
 
-        dead_players = []
-        for pid, data in self.game.players.items():
-            if data.get('life', 20) <= 0:
-                dead_players.append(pid)
-                
-        if dead_players:
-            if len(dead_players) == 2:
-                # Both players reach zero life simultaneously, AP loses
-                nap = self.game.get_other_player(self.game.active_player)
-                self.game.lifecycle_manager.end_game(nap, "LIFE_ZERO")
-            else:
-                self.game.lifecycle_manager.end_game(
-                    self.game.get_other_player(dead_players[0]), "LIFE_ZERO"
-                )
-            return
-
         pdu = {
             "type": "COMBAT_DAMAGE_RESULT",
             "seq_num": self.game.next_seq(),
@@ -136,6 +120,19 @@ class CombatSystem:
             "creatures_died": list(set(creatures_died))
         }
         self.game.broadcast(pdu)
+
+        dead_players = [
+            pid for pid, data in self.game.players.items()
+            if data.get('life', 20) <= 0
+        ]
+        if dead_players:
+            if len(dead_players) == 2:
+                nap = self.game.get_other_player(self.game.active_player)
+                self.game.lifecycle_manager.end_game(nap, "LIFE_ZERO")
+            else:
+                self.game.lifecycle_manager.end_game(
+                    self.game.get_other_player(dead_players[0]), "LIFE_ZERO"
+                )
 
     def reset(self):
         """Reset combat state."""

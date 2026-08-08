@@ -72,7 +72,8 @@ def run_client_interactive(client):
             elif command == 'help':
                 print("Commands: help, hand, state, pass, concede, mulligan, cast, activate, land, attack, block, order_damage, discard, trigger, list, quit")
             elif command == 'hand':
-                hand = client.game_state.get('hand', {}).get(client.player_id, [])
+                raw_hand = client.game_state.get('hand', {})
+                hand = raw_hand.get(client.player_id, []) if isinstance(raw_hand, dict) else raw_hand
                 print(f"Hand ({len(hand)} cards):")
                 for i, card_id in enumerate(hand):
                     from game.card_catalog import get_card

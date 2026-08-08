@@ -66,6 +66,7 @@ class LifecycleManager:
             'hand': [],
             'library': [],
             'graveyard': [],
+            'exile': [],
             'battlefield': [],
             'life': INITIAL_LIFE,
             'ready': True,

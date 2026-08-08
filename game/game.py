@@ -21,6 +21,7 @@ class Game:
         self.phase = None
         self.players = {}
         self.player_conns = []
+        self.spectator_conns = set()
         self.turn = 0
         self.active_player = None
         self.stack = []
@@ -61,9 +62,9 @@ class Game:
         """Find a permanent by ID."""
         return self.state_manager.find_permanent(perm_id)
 
-    def remove_permanent(self, perm_id: str) -> bool:
+    def remove_permanent(self, perm_id: str, to_exile: bool = False) -> bool:
         """Remove a permanent from the game."""
-        return self.state_manager.remove_permanent(perm_id)
+        return self.state_manager.remove_permanent(perm_id, to_exile=to_exile)
 
     def log(self, msg: str):
         """Log a message if verbose mode is enabled."""
@@ -75,6 +76,8 @@ class Game:
     def broadcast(self, pdu: Dict):
         """Send PDU to all connected players."""
         for conn in self.player_conns:
+            self.server.send_pdu(conn, pdu)
+        for conn in list(self.spectator_conns):
             self.server.send_pdu(conn, pdu)
         if self.game_logger:
             self.game_logger.log_pdu('BROADCAST', pdu)
@@ -115,6 +118,14 @@ class Game:
         """Send personalized GAME_STATE_UPDATE to all players."""
         for pid in self.players:
             self.send_game_state(pid)
+        if self.spectator_conns:
+            pdu = {
+                "type": "GAME_STATE_UPDATE",
+                "seq_num": self.next_seq(),
+                "state": self.build_game_state(None),
+            }
+            for conn in list(self.spectator_conns):
+                self.server.send_pdu(conn, pdu)
 
     def broadcast_phase_transition(self, from_phase: str, to_phase: str) -> int:
         """Broadcast a PHASE_TRANSITION PDU."""

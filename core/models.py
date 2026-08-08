@@ -74,6 +74,9 @@ class Permanent:
             return False
         return True
 
+    def has_vigilance(self) -> bool:
+        return 'vigilance' in self.card_data.get('abilities', [])
+
     def get_power(self) -> int:
         """Get current power including modifiers."""
         base = self.card_data.get('power', 0)

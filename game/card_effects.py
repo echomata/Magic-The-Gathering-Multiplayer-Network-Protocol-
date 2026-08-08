@@ -7,7 +7,7 @@ from core.models import Permanent
 class CardEffect:
     """Base class for card effects."""
     
-    def __init__(self, game, card_id: str, controller: str, targets: List[str] = None):
+    def __init__(self, game, card_id: str, controller: str, targets: List[str] = None, ability: str = None):
         self.game = game
         self.card_id = card_id
         self.controller = controller
@@ -15,6 +15,7 @@ class CardEffect:
         self.card = get_card(card_id)
         self.effect_name = self.card.get('effect') if self.card else None
         self.effect_value = self.card.get('effect_value') if self.card else None
+        self.ability = ability
 
     def execute(self) -> Dict:
         """Execute the card effect. Returns state changes."""
@@ -46,9 +47,15 @@ class CardEffect:
             'mind_rot': self._handle_mind_rot,
             'gray_merchant': self._handle_gray_merchant,
             'mana': self._handle_mana,
+            'ping': self._handle_ping,
+            'ping_artifact': self._handle_ping_artifact,
+            'loot': self._handle_loot,
+            'mill': self._handle_mill,
+            'assassinate': self._handle_assassinate,
+            'protection_giver': self._handle_protection_giver,
         }
         
-        handler = effect_handlers.get(self.effect_name)
+        handler = effect_handlers.get(self.ability or self.effect_name)
         if handler:
             return handler()
         
@@ -305,7 +312,7 @@ class CardEffect:
                 power = perm.get_power()
                 controller = perm.controller
                 self.game.players[controller]['life'] += power
-                self.game.remove_permanent(target)
+                self.game.remove_permanent(target, to_exile=True)
                 changes.append({
                     'type': 'EXILE',
                     'target': target,
@@ -321,7 +328,7 @@ class CardEffect:
             perm = self.game.find_permanent(target)
             if perm and is_creature(perm.card_data):
                 controller = perm.controller
-                self.game.remove_permanent(target)
+                self.game.remove_permanent(target, to_exile=True)
                 
                 player = self.game.get_player_data(controller)
                 library = player['library']
@@ -329,11 +336,14 @@ class CardEffect:
                     card = get_card(card_id)
                     if card and is_land(card):
                         library.pop(i)
-                        player['hand'].append(card_id)
+                        land_perm = Permanent(card_id, controller, card_id)
+                        land_perm.tapped = True
+                        player['battlefield'].append(land_perm)
                         changes.append({
                             'type': 'SEARCH',
                             'player': controller,
-                            'card': card_id
+                            'card': card_id,
+                            'tapped': True
                         })
                         break
                 
@@ -502,56 +512,53 @@ class CardEffect:
             }]
         }
 
-
-def execute_card_effect(game, card_id: str, controller: str, targets: List[str] = None) -> Dict:
-    """Execute a card effect."""
-    effect = CardEffect(game, card_id, controller, targets)
-    return effect.execute()
-    def _handle_ping(self) -> dict:
+    def _handle_ping(self) -> Dict:
         changes = []
         for target in self.targets:
             perm = self.game.find_permanent(target)
             if perm:
                 perm.damage += 1
+                changes.append({'type': 'DAMAGE', 'target': target, 'amount': 1})
                 if perm.damage >= perm.get_toughness():
                     self.game.remove_permanent(target)
                     changes.append({'type': 'DESTROY', 'target': target})
+            elif target in self.game.players:
+                self.game.players[target]['life'] -= 1
                 changes.append({'type': 'DAMAGE', 'target': target, 'amount': 1})
-            else:
-                player = self.game.get_player_data(target)
-                if player:
-                    player['life'] -= 1
-                    changes.append({'type': 'DAMAGE', 'target': target, 'amount': 1})
         return {'state_changes': changes}
 
-    def _handle_ping_artifact(self) -> dict:
+    def _handle_ping_artifact(self) -> Dict:
         return self._handle_ping()
 
-    def _handle_loot(self) -> dict:
-        changes = []
+    def _handle_loot(self) -> Dict:
         player = self.game.get_player_data(self.controller)
+        changes = []
         if player['library']:
             drawn = player['library'].pop()
             player['hand'].append(drawn)
             changes.append({'type': 'DRAW', 'player': self.controller, 'card': drawn})
+        if player['hand']:
+            discarded = player['hand'].pop()
+            player['graveyard'].append(discarded)
+            changes.append({'type': 'DISCARD', 'player': self.controller, 'cards': [discarded]})
         return {'state_changes': changes}
 
-    def _handle_mill(self) -> dict:
+    def _handle_mill(self) -> Dict:
         changes = []
         for target in self.targets:
             player = self.game.get_player_data(target)
             if player:
-                milled = []
+                cards = []
                 for _ in range(2):
-                    if player['library']:
-                        card = player['library'].pop()
-                        player['graveyard'].append(card)
-                        milled.append(card)
-                if milled:
-                    changes.append({'type': 'MILL', 'target': target, 'cards': milled})
+                    if not player['library']:
+                        break
+                    card = player['library'].pop()
+                    player['graveyard'].append(card)
+                    cards.append(card)
+                changes.append({'type': 'MILL', 'target': target, 'cards': cards})
         return {'state_changes': changes}
 
-    def _handle_assassinate(self) -> dict:
+    def _handle_assassinate(self) -> Dict:
         changes = []
         for target in self.targets:
             perm = self.game.find_permanent(target)
@@ -560,7 +567,7 @@ def execute_card_effect(game, card_id: str, controller: str, targets: List[str] 
                 changes.append({'type': 'DESTROY', 'target': target})
         return {'state_changes': changes}
 
-    def _handle_protection_giver(self) -> dict:
+    def _handle_protection_giver(self) -> Dict:
         changes = []
         for target in self.targets:
             perm = self.game.find_permanent(target)
@@ -568,3 +575,9 @@ def execute_card_effect(game, card_id: str, controller: str, targets: List[str] 
                 perm._protected = True
                 changes.append({'type': 'PROTECT', 'target': target})
         return {'state_changes': changes}
+
+
+def execute_card_effect(game, card_id: str, controller: str, targets: List[str] = None, ability: str = None) -> Dict:
+    """Execute a card effect."""
+    effect = CardEffect(game, card_id, controller, targets, ability=ability)
+    return effect.execute()
