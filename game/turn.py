@@ -100,9 +100,6 @@ class TurnEngine:
         phase_seq = self.game.broadcast_phase_transition("BEGIN_COMBAT", "DECLARE_ATTACKERS")
         self.game.broadcast_game_state()
 
-        # Per RFC 9.3: no separate request PDU is defined here - the
-        # PHASE_TRANSITION above IS the signal, and the client echoes ITS
-        # seq_num on the DECLARE_ATTACKERS PDU.
         self.game.priority_manager.expect_action(self.game.active_player, phase_seq)
 
     def do_declare_blockers(self):
@@ -168,7 +165,8 @@ class TurnEngine:
         self.game.phase = "COMBAT_DAMAGE"
         self.game.log("COMBAT_DAMAGE step")
 
-        self.game.broadcast_phase_transition("FIRST_STRIKE_DAMAGE", "COMBAT_DAMAGE")
+        prev = "FIRST_STRIKE_DAMAGE" if self.game.combat_system.first_strike_done else "ASSIGN_DAMAGE_ORDER"
+        self.game.broadcast_phase_transition(prev, "COMBAT_DAMAGE")
         self.game.combat_system.deal_combat_damage(first_strike_only=False)
 
         self.game.broadcast_game_state()
@@ -179,7 +177,8 @@ class TurnEngine:
         self.game.phase = "END_OF_COMBAT"
         self.game.log("END_OF_COMBAT step")
 
-        self.game.broadcast_phase_transition("COMBAT_DAMAGE", "END_OF_COMBAT")
+        prev = "COMBAT_DAMAGE" if self.game.combat_system.attackers else "DECLARE_ATTACKERS"
+        self.game.broadcast_phase_transition(prev, "END_OF_COMBAT")
 
         self.game.combat_system.attackers = []
         self.game.combat_system.blockers = []

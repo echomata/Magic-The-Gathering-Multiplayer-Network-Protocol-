@@ -82,7 +82,7 @@ class GameState:
             "phase": self.game.phase,
             "active_player": self.game.active_player,
             "life_totals": {},
-            "hand": {},
+            "hand": [],
             "hand_counts": {},
             "library_counts": {},
             "battlefield": {},
@@ -96,7 +96,7 @@ class GameState:
 
         for pid, data in self.game.players.items():
             if pid == player_id:
-                state["hand"][pid] = data.get('hand', [])[:]
+                state["hand"] = data.get('hand', [])[:]
             else:
                 state["hand_counts"][pid] = len(data.get('hand', []))
 

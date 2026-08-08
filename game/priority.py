@@ -15,11 +15,6 @@ class PriorityManager:
         self.priority_seq = None
         self.passed_players = set()
         self._timer = None
-        # True while we're waiting on an "implicit request" action (e.g.
-        # DECLARE_ATTACKERS) rather than a genuine priority window. Per the
-        # RFC, no PRIORITY_GRANT PDU is defined for those steps - the
-        # PHASE_TRANSITION itself is the signal, and the client echoes ITS
-        # seq_num. See expect_action().
         self.implicit_mode = False
 
     def _timeout_callback(self, player_id: str, seq_num: int):
@@ -52,13 +47,6 @@ class PriorityManager:
         self._timer.start()
 
     def expect_action(self, player_id: str, seq_num: int):
-        """Record that we're waiting for an implicit-request action PDU
-        (DECLARE_ATTACKERS, DECLARE_BLOCKERS, or ASSIGN_DAMAGE_ORDER)
-        WITHOUT sending a PRIORITY_GRANT PDU, per RFC sections 9.3/9.4/9.5:
-        "This transition implicitly signals ... no separate request PDU is
-        defined." The client is expected to echo the seq_num of the
-        PHASE_TRANSITION PDU that announced the step (passed in here).
-        """
         self.implicit_mode = True
         self.priority_holder = player_id
         self.priority_seq = seq_num
@@ -70,14 +58,6 @@ class PriorityManager:
         self._timer.start()
 
     def regrant_priority(self, player_id: str):
-        """Re-prompt a player with the SAME seq_num after an error.
-
-        For a genuine priority window this re-sends PRIORITY_GRANT (per RFC
-        section 11). For an implicit-request step (implicit_mode), no PDU
-        is defined for re-prompting, so we rely on the ERROR PDU itself
-        (which already carries the rejected action) and simply keep waiting
-        - the client can just retry with the same seq_num.
-        """
         if self.priority_holder != player_id:
             return
 
@@ -199,56 +179,55 @@ class PriorityManager:
         self.game.log(f"Resolving stack item: {item.card_id}")
         state_changes = []
 
-        card = get_card(item.card_id)
-        if card:
-            # Permanents (creatures, artifacts, enchantments, lands) always
-            # enter the battlefield when their spell resolves, even if they
-            # also define a top-level "effect" (that field describes a
-            # later ACTIVATED ability, e.g. tapping for mana - it is not
-            # what happens on cast). Checking is_permanent() first fixes
-            # mana dorks (Llanowar Elves, Elvish Mystic) and Sol Ring, which
-            # were previously resolving as one-shot effects and never
-            # actually joining the battlefield.
-            if is_permanent(card):
-                from core.models import Permanent
-                # Per RFC 10.2.2: "Each permanent id matches its card
-                # instance id from the original deck_list." Use the card's
-                # own instance ID (e.g. "goblin_guide_001") as the
-                # permanent's battlefield ID - NOT a freshly generated one -
-                # so that DECLARE_ATTACKERS/DECLARE_BLOCKERS/
-                # ACTIVATE_ABILITY/etc. (which all reference permanents by
-                # this ID, per every RFC example) can actually find it.
-                perm = Permanent(
-                    item.card_id,
-                    item.controller,
-                    item.card_id,
-                    self.game.turn
-                )
-                self.game.players[item.controller]['battlefield'].append(perm)
-                state_changes.append({
-                    "type": "PERMANENT_ENTERS",
-                    "card_id": item.card_id,
-                    "controller": item.controller
-                })
-                self.game.trigger_manager.check_triggers('ETB', {
-                    'permanent': perm,
-                    'kicked': False
-                })
-            else:
-                effect = card.get('effect')
-                if effect:
-                    result = execute_card_effect(self.game, item.card_id, item.controller, item.targets)
-                    if result.get('error'):
-                        self.game.log(f"Effect error: {result['error']}")
-
-                    if result.get('state_changes'):
-                        state_changes.extend(result['state_changes'])
-                        for change in result['state_changes']:
-                            if change.get('type') == 'DESTROY' or change.get('type') == 'DAMAGE':
-                                self.game.trigger_manager.check_triggers('SPELL_RESOLVED', {
-                                    'effect': effect,
-                                    'targets': item.targets
-                                })
+        if item.item_type == "ABILITY":
+            from game.card_effects import execute_card_effect
+            result = execute_card_effect(self.game, item.card_id, item.controller, item.targets, ability=item.ability)
+            if result.get('error'):
+                self.game.log(f"Effect error: {result['error']}")
+            if result.get('state_changes'):
+                state_changes.extend(result['state_changes'])
+        elif item.item_type == "TRIGGER_ABILITY":
+            trigger = item.trigger_data
+            result = self.game.trigger_manager.resolve_trigger(trigger)
+            if result.get('state_changes'):
+                state_changes.extend(result['state_changes'])
+        else:
+            card = get_card(item.card_id)
+            if card:
+                if is_permanent(card):
+                    from core.models import Permanent
+                    perm = Permanent(
+                        item.card_id,
+                        item.controller,
+                        item.card_id,
+                        self.game.turn
+                    )
+                    self.game.players[item.controller]['battlefield'].append(perm)
+                    state_changes.append({
+                        "type": "PERMANENT_ENTERS",
+                        "card_id": item.card_id,
+                        "controller": item.controller
+                    })
+                    self.game.trigger_manager.check_triggers('ETB', {
+                        'permanent': perm,
+                        'kicked': False
+                    })
+                else:
+                    effect = card.get('effect')
+                    if effect:
+                        from game.card_effects import execute_card_effect
+                        result = execute_card_effect(self.game, item.card_id, item.controller, item.targets)
+                        if result.get('error'):
+                            self.game.log(f"Effect error: {result['error']}")
+        
+                        if result.get('state_changes'):
+                            state_changes.extend(result['state_changes'])
+                            for change in result['state_changes']:
+                                if change.get('type') == 'DESTROY' or change.get('type') == 'DAMAGE':
+                                    self.game.trigger_manager.check_triggers('SPELL_RESOLVED', {
+                                        'effect': effect,
+                                        'targets': item.targets
+                                    })
 
         for change in state_changes:
             if 'type' in change:

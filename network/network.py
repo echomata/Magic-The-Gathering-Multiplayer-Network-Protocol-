@@ -62,7 +62,9 @@ def send_pdu(sock: socket.socket, pdu: Dict, verbose: bool = False) -> bool:
         True if successful, False otherwise
     """
     try:
+        # encode_message adds a 4-byte big-endian length prefix for TCP framing.
         data = encode_message(pdu)
+        # We use sendall to ensure the complete framed message is pushed to the socket buffer.
         sock.sendall(data)
         if verbose:
             print(f"[SEND] {json.dumps(pdu, indent=2)}")
@@ -91,12 +93,15 @@ def recv_pdu(sock: socket.socket, buffer: bytes, verbose: bool = False) -> tuple
             return None, buffer
         buffer += data
         
-        # Process all complete messages
+        # Process all complete framed messages
         while len(buffer) >= 4:
+            # First 4 bytes contain the big-endian length of the JSON payload
             length = struct.unpack('>I', buffer[:4])[0]
+            # Ensure we have received the full payload (4 bytes prefix + payload length)
             if len(buffer) < 4 + length:
                 break
             
+            # Extract exactly one framed message and advance buffer
             message_data = buffer[:4+length]
             buffer = buffer[4+length:]
             

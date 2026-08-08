@@ -97,6 +97,68 @@ class TriggerManager:
         for trigger in ordered_triggers:
             self._put_trigger_on_stack(trigger)
 
+
+    def resolve_trigger(self, trigger_data: Dict) -> Dict:
+        changes = []
+        effect = trigger_data.get('effect')
+        
+        if effect == 'bushwhacker_boost':
+            for perm in self.game.players[trigger_data['controller']]['battlefield']:
+                perm.add_power_toughness(1, 0)
+                if not perm.has_haste():
+                    perm.abilities.append('haste')
+        
+        elif effect == 'prowess':
+            perm_id = trigger_data.get('source')
+            perm = self.game.find_permanent(perm_id)
+            if perm:
+                perm.add_power_toughness(1, 1)
+                
+        elif effect == 'illusion_sacrifice':
+            perm_id = trigger_data.get('source')
+            if self.game.remove_permanent(perm_id):
+                changes.append({'type': 'DESTROY', 'target': perm_id})
+                
+        elif effect == 'goblin_guide_trigger':
+            target_player = self.game.get_other_player(trigger_data['controller'])
+            if target_player:
+                pdata = self.game.players[target_player]
+                if pdata['library']:
+                    top_card_id = pdata['library'][-1]
+                    changes.append({'type': 'REVEAL', 'player': target_player, 'card': top_card_id})
+                    from game.card_catalog import get_card, is_land
+                    top_card = get_card(top_card_id)
+                    if top_card and is_land(top_card):
+                        drawn = pdata['library'].pop()
+                        pdata['hand'].append(drawn)
+                        changes.append({'type': 'DRAW', 'player': target_player, 'card': drawn})
+                        
+        elif effect == 'gravedigger_trigger':
+            player = self.game.players[trigger_data['controller']]
+            for i, cid in enumerate(player['graveyard']):
+                from game.card_catalog import get_card, is_creature
+                c = get_card(cid)
+                if c and is_creature(c):
+                    card = player['graveyard'].pop(i)
+                    player['hand'].append(card)
+                    changes.append({'type': 'RETURN_TO_HAND', 'player': trigger_data['controller'], 'card': card})
+                    break
+
+        elif effect == 'gray_merchant':
+            devotion = self.game.state_manager.get_devotion(trigger_data['controller'], 'B')
+            if devotion > 0:
+                drain_total = 0
+                for pid, pdata in self.game.players.items():
+                    if pid != trigger_data['controller']:
+                        pdata['life'] -= devotion
+                        drain_total += devotion
+                        changes.append({'type': 'DAMAGE', 'target': pid, 'amount': devotion})
+                if drain_total > 0:
+                    self.game.players[trigger_data['controller']]['life'] += drain_total
+                    changes.append({'type': 'HEAL', 'target': trigger_data['controller'], 'amount': drain_total})
+
+        return {'state_changes': changes}
+
     def is_waiting(self) -> bool:
         """Check if server is waiting for a trigger decision."""
         return self.waiting_for_order is not None or self.waiting_for_choice is not None

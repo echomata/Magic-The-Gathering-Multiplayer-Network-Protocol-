@@ -59,12 +59,13 @@ class CombatSystem:
                             blocker_perm.damage += remaining_power
                             if blocker_perm.damage >= blocker_perm.get_toughness():
                                 creatures_died.append(block_id)
+                            damage_to_deal = min(remaining_power, blocker_perm.get_toughness())
                             damage_events.append({
                                 "source": creature_id,
                                 "target": block_id,
-                                "amount": remaining_power
+                                "amount": damage_to_deal
                             })
-                            remaining_power = 0
+                            remaining_power -= damage_to_deal
                 else:
                     for block in blockers:
                         blocker_perm = self.game.find_permanent(block.get('creature_id'))

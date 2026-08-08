@@ -107,6 +107,7 @@ class StackItem:
         self.controller = controller
         self.targets = targets or []
         self.item_type = "SPELL"
+        self.ability = None
         self.trigger_data = None
         self.resolved = False
 
@@ -115,7 +116,7 @@ class StackItem:
         return {
             "stack_item_id": self.stack_item_id,
             "item_type": self.item_type,
-            "source": self.card_id,
+            "source": getattr(self, 'source_id', self.card_id),
             "targets": self.targets,
             "controller": self.controller
         }

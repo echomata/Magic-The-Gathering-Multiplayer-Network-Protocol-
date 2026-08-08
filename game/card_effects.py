@@ -507,3 +507,64 @@ def execute_card_effect(game, card_id: str, controller: str, targets: List[str] 
     """Execute a card effect."""
     effect = CardEffect(game, card_id, controller, targets)
     return effect.execute()
+    def _handle_ping(self) -> dict:
+        changes = []
+        for target in self.targets:
+            perm = self.game.find_permanent(target)
+            if perm:
+                perm.damage += 1
+                if perm.damage >= perm.get_toughness():
+                    self.game.remove_permanent(target)
+                    changes.append({'type': 'DESTROY', 'target': target})
+                changes.append({'type': 'DAMAGE', 'target': target, 'amount': 1})
+            else:
+                player = self.game.get_player_data(target)
+                if player:
+                    player['life'] -= 1
+                    changes.append({'type': 'DAMAGE', 'target': target, 'amount': 1})
+        return {'state_changes': changes}
+
+    def _handle_ping_artifact(self) -> dict:
+        return self._handle_ping()
+
+    def _handle_loot(self) -> dict:
+        changes = []
+        player = self.game.get_player_data(self.controller)
+        if player['library']:
+            drawn = player['library'].pop()
+            player['hand'].append(drawn)
+            changes.append({'type': 'DRAW', 'player': self.controller, 'card': drawn})
+        return {'state_changes': changes}
+
+    def _handle_mill(self) -> dict:
+        changes = []
+        for target in self.targets:
+            player = self.game.get_player_data(target)
+            if player:
+                milled = []
+                for _ in range(2):
+                    if player['library']:
+                        card = player['library'].pop()
+                        player['graveyard'].append(card)
+                        milled.append(card)
+                if milled:
+                    changes.append({'type': 'MILL', 'target': target, 'cards': milled})
+        return {'state_changes': changes}
+
+    def _handle_assassinate(self) -> dict:
+        changes = []
+        for target in self.targets:
+            perm = self.game.find_permanent(target)
+            if perm and perm.tapped:
+                self.game.remove_permanent(target)
+                changes.append({'type': 'DESTROY', 'target': target})
+        return {'state_changes': changes}
+
+    def _handle_protection_giver(self) -> dict:
+        changes = []
+        for target in self.targets:
+            perm = self.game.find_permanent(target)
+            if perm and perm.controller == self.controller:
+                perm._protected = True
+                changes.append({'type': 'PROTECT', 'target': target})
+        return {'state_changes': changes}

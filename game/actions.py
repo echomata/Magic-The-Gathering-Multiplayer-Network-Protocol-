@@ -180,6 +180,22 @@ class ActionHandler:
 
         # All spells, including permanents, go on the stack
 
+        
+        # Check SPELL_CAST trigger
+        self.game.trigger_manager.check_triggers('SPELL_CAST', {
+            'spell': card_id,
+            'controller': player_id
+        })
+        
+        # Check TARGETED trigger if the spell targets a permanent
+        targets = pdu.get('targets', [])
+        for t in targets:
+            perm = self.game.find_permanent(t)
+            if perm:
+                self.game.trigger_manager.check_triggers('TARGETED', {
+                    'target': t,
+                    'source': card_id
+                })
         stack_item = StackItem(card_id, player_id, pdu.get('targets', []))
         self.game.stack.append(stack_item)
 
@@ -451,7 +467,8 @@ class ActionHandler:
         
         stack_item = StackItem(perm.card_id, player_id, pdu.get('targets', []))
         stack_item.item_type = "ABILITY"
-        stack_item.card_id = source_id
+        stack_item.source_id = source_id
+        stack_item.ability = ability
         self.game.stack.append(stack_item)
 
         pdu2 = {
