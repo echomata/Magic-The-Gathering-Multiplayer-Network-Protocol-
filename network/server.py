@@ -146,7 +146,12 @@ class MTGNPServer:
 
         handler = handlers.get(pdu_type)
         if handler:
-            handler(conn, pdu)
+            try:
+                handler(conn, pdu)
+            except (AttributeError, KeyError, TypeError, ValueError) as exc:
+                # Malformed action fields are protocol errors. They must not
+                # tear down an otherwise healthy TCP session.
+                self.send_error(conn, "ILLEGAL_ACTION", f"Invalid PDU fields: {exc}", pdu)
         else:
             self.send_error(conn, "UNKNOWN_TYPE", f"Unknown PDU type: {pdu_type}", pdu)
 

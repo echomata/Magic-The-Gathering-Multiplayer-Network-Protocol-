@@ -25,6 +25,10 @@ class MTGNPClient:
         self._last_priority_seq = None
         self._last_phase_transition_seq = None
         self.last_pong_time = time.time()
+        self._ping_seq_num = 0
+        self._pending_ping_seq = None
+        self._last_mulligan_seq = None
+        self._last_discard_seq = None
         self.pending_trigger_order = None
         self.pending_trigger_choice = None
 
@@ -99,6 +103,11 @@ class MTGNPClient:
 
         if pdu_type == 'GAME_STATE_UPDATE':
             self.game_state = pdu.get('state', {})
+            phase = self.game_state.get('phase')
+            if phase == 'MULLIGAN':
+                self._last_mulligan_seq = pdu.get('seq_num')
+            elif phase == 'CLEANUP':
+                self._last_discard_seq = pdu.get('seq_num')
             self._render_state()
         elif pdu_type == 'PRIORITY_GRANT':
             self._handle_priority(pdu)
@@ -121,7 +130,9 @@ class MTGNPClient:
         elif pdu_type == 'ERROR':
             self.log(f"Error: {pdu.get('code')} - {pdu.get('message')}")
         elif pdu_type == 'PONG':
-            self.last_pong_time = time.time()
+            if self._pending_ping_seq is None or pdu.get('seq_num') == self._pending_ping_seq:
+                self.last_pong_time = time.time()
+                self._pending_ping_seq = None
             self.log(f"PONG received (seq={pdu.get('seq_num')})")
         elif pdu_type == 'GAME_OVER':
             self.log(f"GAME OVER! Winner: {pdu.get('winner_id')} (reason: {pdu.get('reason')})")
@@ -197,12 +208,12 @@ class MTGNPClient:
         """Start periodic ping loop."""
         def ping_loop():
             while self.running:
-                time.sleep(PING_INTERVAL)
+                time.sleep(1.0)
                 if not self.running:
                     break
-                
-                # Check for timeout (e.g. 3 x PING_INTERVAL)
-                if time.time() - self.last_pong_time > PONG_TIMEOUT:
+
+                now = time.time()
+                if self._pending_ping_seq is not None and now - self.last_pong_time > PONG_TIMEOUT:
                     self.log("Server PONG timeout! Disconnecting...")
                     self.running = False
                     if self.socket:
@@ -212,13 +223,16 @@ class MTGNPClient:
                             pass
                     break
 
-                self.seq_num += 1
-                pdu = {
-                    "type": "PING",
-                    "seq_num": self.seq_num,
-                    "timestamp": int(time.time() * 1000)
-                }
-                self.send_pdu(pdu)
+                if self._pending_ping_seq is None and now - self.last_pong_time >= PING_INTERVAL:
+                    self._ping_seq_num += 1
+                    self._pending_ping_seq = self._ping_seq_num
+                    self.last_pong_time = now
+                    pdu = {
+                        "type": "PING",
+                        "seq_num": self._pending_ping_seq,
+                        "timestamp": int(now * 1000)
+                    }
+                    self.send_pdu(pdu)
 
         thread = threading.Thread(target=ping_loop)
         thread.daemon = True
@@ -241,10 +255,10 @@ class MTGNPClient:
     def send_player_ready(self, player_id: str, deck_list: List[str]):
         """Send PLAYER_READY PDU."""
         self.player_id = player_id
-        self.seq_num += 1
+        self._player_ready_seq = getattr(self, '_player_ready_seq', 0) + 1
         pdu = {
             "type": "PLAYER_READY",
-            "seq_num": self.seq_num,
+            "seq_num": self._player_ready_seq,
             "player_id": player_id,
             "deck_list": deck_list
         }
@@ -253,7 +267,7 @@ class MTGNPClient:
     def send_mulligan_choice(self, keep: bool, cards_to_bottom: List[str] = None, seq_num: int = None):
         """Send MULLIGAN_CHOICE PDU."""
         if seq_num is None:
-            seq_num = self._last_priority_seq or self.seq_num
+            seq_num = self._last_mulligan_seq
         pdu = {
             "type": "MULLIGAN_CHOICE",
             "seq_num": seq_num,
@@ -319,11 +333,13 @@ class MTGNPClient:
         }
         self.send_pdu(pdu)
 
-    def send_discard(self, card_ids: list):
+    def send_discard(self, card_ids: list, seq_num: int = None):
         """Send a DISCARD PDU."""
+        if seq_num is None:
+            seq_num = self._last_discard_seq
         pdu = {
             "type": "DISCARD",
-            "seq_num": self.seq_num,
+            "seq_num": seq_num,
             "card_ids": card_ids
         }
         self.send_pdu(pdu)
@@ -361,7 +377,7 @@ class MTGNPClient:
             return
         pdu = {
             "type": "TRIGGER_ORDER_RESPONSE",
-            "seq_num": self.seq_num,
+            "seq_num": self.pending_trigger_order.get('seq_num'),
             "ordered_trigger_ids": ordered_trigger_ids
         }
         self.send_pdu(pdu)
@@ -374,7 +390,7 @@ class MTGNPClient:
             return
         pdu = {
             "type": "TRIGGER_CHOICE_RESPONSE",
-            "seq_num": self.seq_num,
+            "seq_num": self.pending_trigger_choice.get('seq_num'),
             "accept": accept
         }
         if chosen_target:

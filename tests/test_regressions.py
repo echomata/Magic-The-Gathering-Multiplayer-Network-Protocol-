@@ -54,6 +54,53 @@ class ProtocolRegressionTests(unittest.TestCase):
             )
         )
 
+    def test_creature_spell_does_not_require_a_target(self):
+        from game.card_catalog import get_card
+
+        action = ActionHandler(make_game())
+        self.assertIsNone(
+            action._validate_spell_targets(
+                get_card("goblin_guide_001"), [], "player_1"
+            )
+        )
+
+    def test_play_land_requires_current_priority_token(self):
+        game = make_game()
+        game.state = "IN_GAME"
+        game.phase = "PRECOMBAT_MAIN"
+        game.active_player = "player_1"
+        game.priority_manager.priority_holder = "player_1"
+        game.priority_manager.priority_seq = 7
+        game.players["player_1"]["hand"] = ["mountain_001"]
+
+        ActionHandler(game).handle_play_land(
+            None, {"type": "PLAY_LAND", "seq_num": 6, "card_id": "mountain_001"}
+        )
+        self.assertEqual(game.players["player_1"]["hand"], ["mountain_001"])
+        self.assertEqual(game.players["player_1"]["battlefield"], [])
+
+    def test_summoning_sick_creature_cannot_activate_tap_ability(self):
+        game = make_game()
+        game.state = "IN_GAME"
+        game.phase = "PRECOMBAT_MAIN"
+        game.priority_manager.priority_holder = "player_1"
+        game.priority_manager.priority_seq = 9
+        source = Permanent("llanowar_elves_001", "player_1", "llanowar_elves_001", 1)
+        game.players["player_1"]["battlefield"] = [source]
+
+        ActionHandler(game).handle_activate_ability(
+            None,
+            {
+                "type": "ACTIVATE_ABILITY",
+                "seq_num": 9,
+                "source_id": source.id,
+                "ability_index": 0,
+                "targets": [],
+                "cost_payment": {"tap": True, "mana": {}},
+            },
+        )
+        self.assertFalse(source.tapped)
+
     def test_flying_and_vigilance(self):
         flyer = Permanent("air_elemental_001", "player_1", "air_elemental_001", 1)
         angel = Permanent("serra_angel_001", "player_1", "serra_angel_001", 1)

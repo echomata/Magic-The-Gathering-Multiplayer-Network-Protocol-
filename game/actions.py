@@ -125,7 +125,10 @@ class ActionHandler:
 
         effect = card.get('effect')
         base_id = card.get('base_id', '')
-        needs_target = effect not in {'ponder', 'dark_ritual', 'gray_merchant', 'mana'}
+        # Permanents/creatures with no spell effect do not target anything.
+        # Only effects that explicitly require a target should be subject to
+        # the one-target validation below.
+        needs_target = effect not in {None, 'ponder', 'dark_ritual', 'gray_merchant', 'mana'}
         if needs_target and len(targets) != 1:
             return "This spell requires exactly one target"
         if not needs_target and targets:
@@ -202,6 +205,9 @@ class ActionHandler:
             return
 
         card_id = pdu.get('card_id')
+        if not isinstance(card_id, str):
+            self.game.send_error(conn, "ILLEGAL_ACTION", "card_id must be a string", pdu)
+            return
         card = get_card(card_id)
         if not card:
             self.game.send_error(conn, "ILLEGAL_ACTION", f"Unknown card: {card_id}", pdu)
@@ -230,7 +236,11 @@ class ActionHandler:
                                    "Cannot cast at sorcery speed while the stack is not empty", pdu)
                 return
 
-        target_error = self._validate_spell_targets(card, pdu.get('targets', []), player_id)
+        targets = pdu.get('targets', [])
+        if not isinstance(targets, list):
+            self.game.send_error(conn, "ILLEGAL_TARGET", "targets must be an array", pdu)
+            return
+        target_error = self._validate_spell_targets(card, targets, player_id)
         if target_error:
             self.game.send_error(conn, "ILLEGAL_TARGET", target_error, pdu)
             return
@@ -238,6 +248,9 @@ class ActionHandler:
         kicked = bool(pdu.get('kicked', False))
         kicker_payment = pdu.get('kicker_payment', {})
         if kicked:
+            if not isinstance(kicker_payment, dict):
+                self.game.send_error(conn, "ILLEGAL_ACTION", "kicker_payment must be an object", pdu)
+                return
             if 'kicker_1R' in card.get('abilities', []):
                 kicker_cost = {'R': 1, 'X': 1}
             elif 'kicker_G' in card.get('abilities', []):
@@ -253,17 +266,21 @@ class ActionHandler:
             return
 
         mana_payment = pdu.get('mana_payment', {})
+        if not isinstance(mana_payment, dict):
+            self.game.send_error(conn, "ILLEGAL_ACTION", "mana_payment must be an object", pdu)
+            return
         mana_cost = card.get('mana_cost', {})
         if not check_mana(mana_payment, mana_cost):
             self.game.send_error(conn, "INSUFFICIENT_MANA", "Not enough mana", pdu)
             return
             
-        if not self._pay_mana(player_id, mana_payment):
-            self.game.send_error(conn, "INSUFFICIENT_MANA", "Cannot pay mana with available sources", pdu)
-            return
+        total_payment = dict(mana_payment)
+        if kicked:
+            for color, amount in kicker_payment.items():
+                total_payment[color] = total_payment.get(color, 0) + amount
 
-        if kicked and not self._pay_mana(player_id, kicker_payment):
-            self.game.send_error(conn, "INSUFFICIENT_MANA", "Cannot pay kicker cost", pdu)
+        if not self._pay_mana(player_id, total_payment):
+            self.game.send_error(conn, "INSUFFICIENT_MANA", "Cannot pay mana with available sources", pdu)
             return
 
         self.game.players[player_id]['hand'].remove(card_id)
@@ -271,7 +288,6 @@ class ActionHandler:
         # All spells, including permanents, go on the stack
 
         
-        targets = pdu.get('targets', [])
         stack_item = StackItem(card_id, player_id, pdu.get('targets', []), kicked=kicked)
         self.game.stack.append(stack_item)
 
@@ -308,6 +324,14 @@ class ActionHandler:
         player_id = self.game.get_player_by_conn(conn)
         if not player_id:
             self.game.send_error(conn, "ILLEGAL_ACTION", "Unknown player", pdu)
+            return
+
+        if player_id != self.game.priority_manager.priority_holder:
+            self.game.send_error(conn, "NOT_YOUR_PRIORITY", "You don't have priority", pdu)
+            return
+
+        if pdu.get('seq_num') != self.game.priority_manager.priority_seq:
+            self.game.send_error(conn, "STALE_ACTION", "Stale priority", pdu)
             return
 
         if player_id != self.game.active_player:
@@ -550,8 +574,17 @@ class ActionHandler:
             return
         
         cost_payment = pdu.get('cost_payment', {})
+        if not isinstance(cost_payment, dict):
+            self.game.send_error(conn, "ILLEGAL_ACTION", "cost_payment must be an object", pdu)
+            return
         mana_payment = cost_payment.get('mana', {})
         targets = pdu.get('targets', [])
+        if not isinstance(mana_payment, dict):
+            self.game.send_error(conn, "ILLEGAL_ACTION", "cost_payment.mana must be an object", pdu)
+            return
+        if not isinstance(targets, list):
+            self.game.send_error(conn, "ILLEGAL_TARGET", "targets must be an array", pdu)
+            return
         if ability in {'ping', 'ping_artifact', 'assassinate', 'mill', 'protection_giver', 'regenerate'} and len(targets) != 1:
             self.game.send_error(conn, "ILLEGAL_TARGET", "This ability requires exactly one target", pdu)
             return
@@ -595,12 +628,16 @@ class ActionHandler:
             if perm.tapped:
                 self.game.send_error(conn, "ILLEGAL_ACTION", "Permanent is already tapped", pdu)
                 return
-            perm.tapped = True
-            
+            if perm.summoning_sick and is_creature(perm.card_data) and not perm.has_haste():
+                self.game.send_error(conn, "ILLEGAL_ACTION", "Creature has summoning sickness", pdu)
+                return
         if mana_payment:
             if not self._pay_mana(player_id, mana_payment):
                 self.game.send_error(conn, "INSUFFICIENT_MANA", "Cannot pay mana with available sources", pdu)
                 return
+
+        if requires_tap:
+            perm.tapped = True
 
         if ability.startswith('mana_'):
             mana = ability[5:]
