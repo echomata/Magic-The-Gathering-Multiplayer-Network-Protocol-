@@ -72,6 +72,23 @@ class TriggerManager:
                 'effect': 'goblin_guide_trigger',
                 'effect_value': None
             }
+
+        if event_type == 'SPELL_CAST' and 'prowess' in abilities:
+            spell = get_card(event_data.get('spell'))
+            if spell and spell.get('type') not in {'Creature', 'Artifact Creature'}:
+                return {
+                    'type': 'SPELL_CAST',
+                    'effect': 'prowess',
+                    'effect_value': None
+                }
+
+        if event_type == 'TARGETED' and 'illusion' in abilities:
+            if event_data.get('target') == perm.id:
+                return {
+                    'type': 'TARGETED',
+                    'effect': 'illusion_sacrifice',
+                    'effect_value': None
+                }
         
         return None
 
@@ -104,18 +121,19 @@ class TriggerManager:
         
         if effect == 'bushwhacker_boost':
             for perm in self.game.players[trigger_data['controller']]['battlefield']:
-                perm.add_power_toughness(1, 0)
+                perm._temporary_bonus['power'] = perm._temporary_bonus.get('power', 0) + 1
                 if not perm.has_haste():
-                    perm.abilities.append('haste')
+                    perm.temporary_abilities.add('haste')
         
         elif effect == 'prowess':
-            perm_id = trigger_data.get('source')
+            perm_id = trigger_data.get('source', trigger_data.get('permanent_id'))
             perm = self.game.find_permanent(perm_id)
             if perm:
-                perm.add_power_toughness(1, 1)
+                perm._temporary_bonus['power'] = perm._temporary_bonus.get('power', 0) + 1
+                perm._temporary_bonus['toughness'] = perm._temporary_bonus.get('toughness', 0) + 1
                 
         elif effect == 'illusion_sacrifice':
-            perm_id = trigger_data.get('source')
+            perm_id = trigger_data.get('source', trigger_data.get('permanent_id'))
             if self.game.remove_permanent(perm_id):
                 changes.append({'type': 'DESTROY', 'target': perm_id})
                 

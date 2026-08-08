@@ -262,7 +262,7 @@ class MTGNPClient:
         }
         self.send_pdu(pdu)
 
-    def send_cast_spell(self, card_id: str, targets: List[str], mana_payment: Dict, seq_num: int = None):
+    def send_cast_spell(self, card_id: str, targets: List[str], mana_payment: Dict, seq_num: int = None, kicked: bool = False, kicker_payment: Dict = None):
         """Send CAST_SPELL PDU."""
         if seq_num is None:
             seq_num = self._last_priority_seq
@@ -273,6 +273,9 @@ class MTGNPClient:
             "targets": targets,
             "mana_payment": mana_payment
         }
+        if kicked:
+            pdu["kicked"] = True
+            pdu["kicker_payment"] = kicker_payment or {}
         self.send_pdu(pdu)
 
     def send_play_land(self, card_id: str, seq_num: int = None):

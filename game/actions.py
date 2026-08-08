@@ -170,6 +170,8 @@ class ActionHandler:
             return "This spell must target a creature"
         if perm and getattr(perm, '_protected', False) and perm.controller != player_id:
             return "Target has protection"
+        if perm and perm.has_protection_from(card.get('color', '')) and perm.controller != player_id:
+            return "Target has protection from this spell's color"
         if artifact_or_enchantment and (not perm or not (is_artifact(target_card) or is_enchantment(target_card))):
             return "This spell must target an artifact or enchantment"
         if effect in {'deal_damage', 'deal_damage_no_prevent', 'deal_damage_no_regen'} and not (target_player or perm):
@@ -233,6 +235,23 @@ class ActionHandler:
             self.game.send_error(conn, "ILLEGAL_TARGET", target_error, pdu)
             return
 
+        kicked = bool(pdu.get('kicked', False))
+        kicker_payment = pdu.get('kicker_payment', {})
+        if kicked:
+            if 'kicker_1R' in card.get('abilities', []):
+                kicker_cost = {'R': 1, 'X': 1}
+            elif 'kicker_G' in card.get('abilities', []):
+                kicker_cost = {'G': 1}
+            else:
+                self.game.send_error(conn, "ILLEGAL_ACTION", "This card has no kicker", pdu)
+                return
+            if not check_mana(kicker_payment, kicker_cost):
+                self.game.send_error(conn, "INSUFFICIENT_MANA", "Kicker payment is insufficient", pdu)
+                return
+        elif kicker_payment:
+            self.game.send_error(conn, "ILLEGAL_ACTION", "kicker_payment requires kicked=true", pdu)
+            return
+
         mana_payment = pdu.get('mana_payment', {})
         mana_cost = card.get('mana_cost', {})
         if not check_mana(mana_payment, mana_cost):
@@ -243,28 +262,31 @@ class ActionHandler:
             self.game.send_error(conn, "INSUFFICIENT_MANA", "Cannot pay mana with available sources", pdu)
             return
 
+        if kicked and not self._pay_mana(player_id, kicker_payment):
+            self.game.send_error(conn, "INSUFFICIENT_MANA", "Cannot pay kicker cost", pdu)
+            return
+
         self.game.players[player_id]['hand'].remove(card_id)
 
         # All spells, including permanents, go on the stack
 
         
-        # Check SPELL_CAST trigger
+        targets = pdu.get('targets', [])
+        stack_item = StackItem(card_id, player_id, pdu.get('targets', []), kicked=kicked)
+        self.game.stack.append(stack_item)
+
+        # Triggers are checked after the spell is on the stack so triggered
+        # abilities are placed above it and resolve first.
         self.game.trigger_manager.check_triggers('SPELL_CAST', {
             'spell': card_id,
             'controller': player_id
         })
-        
-        # Check TARGETED trigger if the spell targets a permanent
-        targets = pdu.get('targets', [])
         for t in targets:
-            perm = self.game.find_permanent(t)
-            if perm:
+            if self.game.find_permanent(t):
                 self.game.trigger_manager.check_triggers('TARGETED', {
                     'target': t,
                     'source': card_id
                 })
-        stack_item = StackItem(card_id, player_id, pdu.get('targets', []))
-        self.game.stack.append(stack_item)
 
         self.game.log(f"Player {player_id} cast {card_id}")
 
@@ -418,6 +440,14 @@ class ActionHandler:
                 self.game.send_error(conn, "ILLEGAL_ACTION", f"Creature {creature_id} can't block", pdu)
                 return
 
+            attacker_perm = self.game.find_permanent(blocking_id)
+            if attacker_perm and attacker_perm.has_flying() and not perm.has_flying():
+                self.game.send_error(conn, "ILLEGAL_ACTION", "Only flying creatures can block a flyer", pdu)
+                return
+            if attacker_perm and attacker_perm.has_protection_from(perm.card_data.get('color', '')):
+                self.game.send_error(conn, "ILLEGAL_ACTION", "Creature cannot block because of protection", pdu)
+                return
+
             if not any(a.get('creature_id') == blocking_id for a in self.game.combat_system.attackers):
                 self.game.send_error(conn, "ILLEGAL_ACTION", f"Attacker {blocking_id} not found", pdu)
                 return
@@ -520,8 +550,9 @@ class ActionHandler:
             return
         
         cost_payment = pdu.get('cost_payment', {})
+        mana_payment = cost_payment.get('mana', {})
         targets = pdu.get('targets', [])
-        if ability in {'ping', 'ping_artifact', 'assassinate', 'mill', 'protection_giver'} and len(targets) != 1:
+        if ability in {'ping', 'ping_artifact', 'assassinate', 'mill', 'protection_giver', 'regenerate'} and len(targets) != 1:
             self.game.send_error(conn, "ILLEGAL_TARGET", "This ability requires exactly one target", pdu)
             return
         if ability == 'loot' and targets:
@@ -535,6 +566,7 @@ class ActionHandler:
             if targets[0] not in self.game.players and not target_perm:
                 self.game.send_error(conn, "ILLEGAL_TARGET", "Invalid ping target", pdu)
                 return
+
         if ability == 'assassinate':
             target_perm = self.game.find_permanent(targets[0])
             if not target_perm or not target_perm.tapped or not is_creature(target_perm.card_data):
@@ -544,6 +576,14 @@ class ActionHandler:
             target_perm = self.game.find_permanent(targets[0])
             if not target_perm or target_perm.controller != player_id or not is_creature(target_perm.card_data):
                 self.game.send_error(conn, "ILLEGAL_TARGET", "Protection must target your creature", pdu)
+                return
+        if ability == 'regenerate':
+            target_perm = self.game.find_permanent(targets[0])
+            if target_perm is not perm:
+                self.game.send_error(conn, "ILLEGAL_TARGET", "Regenerate must target its source", pdu)
+                return
+            if mana_payment.get('G') != 1 or mana_payment.get('X') != 1:
+                self.game.send_error(conn, "INSUFFICIENT_MANA", "Regenerate costs {1}{G}", pdu)
                 return
         
         requires_tap = cost_payment.get('tap', False)
@@ -557,7 +597,6 @@ class ActionHandler:
                 return
             perm.tapped = True
             
-        mana_payment = cost_payment.get('mana', {})
         if mana_payment:
             if not self._pay_mana(player_id, mana_payment):
                 self.game.send_error(conn, "INSUFFICIENT_MANA", "Cannot pay mana with available sources", pdu)

@@ -7,7 +7,7 @@ from core.models import Permanent
 class CardEffect:
     """Base class for card effects."""
     
-    def __init__(self, game, card_id: str, controller: str, targets: List[str] = None, ability: str = None):
+    def __init__(self, game, card_id: str, controller: str, targets: List[str] = None, ability: str = None, kicked: bool = False):
         self.game = game
         self.card_id = card_id
         self.controller = controller
@@ -16,6 +16,7 @@ class CardEffect:
         self.effect_name = self.card.get('effect') if self.card else None
         self.effect_value = self.card.get('effect_value') if self.card else None
         self.ability = ability
+        self.kicked = kicked
 
     def execute(self) -> Dict:
         """Execute the card effect. Returns state changes."""
@@ -53,6 +54,7 @@ class CardEffect:
             'mill': self._handle_mill,
             'assassinate': self._handle_assassinate,
             'protection_giver': self._handle_protection_giver,
+            'regenerate': self._handle_regenerate,
         }
         
         handler = effect_handlers.get(self.ability or self.effect_name)
@@ -281,7 +283,7 @@ class CardEffect:
     def _handle_vines_of_vastwood(self) -> Dict:
         """Give hexproof and optionally +4/+4."""
         changes = []
-        kicked = self.card.get('kicked', False)
+        kicked = self.kicked
         
         for target in self.targets:
             perm = self.game.find_permanent(target)
@@ -576,8 +578,15 @@ class CardEffect:
                 changes.append({'type': 'PROTECT', 'target': target})
         return {'state_changes': changes}
 
+    def _handle_regenerate(self) -> Dict:
+        perm = self.game.find_permanent(self.targets[0]) if self.targets else None
+        if not perm:
+            return {'error': 'Invalid regeneration target'}
+        perm._regeneration_shield += 1
+        return {'state_changes': [{'type': 'REGENERATION_SHIELD', 'target': perm.id}]}
 
-def execute_card_effect(game, card_id: str, controller: str, targets: List[str] = None, ability: str = None) -> Dict:
+
+def execute_card_effect(game, card_id: str, controller: str, targets: List[str] = None, ability: str = None, kicked: bool = False) -> Dict:
     """Execute a card effect."""
-    effect = CardEffect(game, card_id, controller, targets, ability=ability)
+    effect = CardEffect(game, card_id, controller, targets, ability=ability, kicked=kicked)
     return effect.execute()

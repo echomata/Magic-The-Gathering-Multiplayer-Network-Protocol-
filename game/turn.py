@@ -34,6 +34,8 @@ class TurnEngine:
                 if perm.controller == self.game.active_player:
                     perm.tapped = False
                     perm._temporary_bonus = {'power': 0, 'toughness': 0}
+                    perm.temporary_abilities.clear()
+                    perm._regeneration_shield = 0
                     perm._pacified = False
                     perm._protected = False
                     perm.summoning_sick = False
@@ -224,6 +226,8 @@ class TurnEngine:
             for perm in pdata.get('battlefield', []):
                 perm.damage = 0
                 perm._temporary_bonus = {'power': 0, 'toughness': 0}
+                perm.temporary_abilities.clear()
+                perm._regeneration_shield = 0
 
         self.game.broadcast_game_state()
         self.end_turn()

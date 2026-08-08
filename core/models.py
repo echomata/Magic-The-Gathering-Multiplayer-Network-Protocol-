@@ -3,7 +3,7 @@ from typing import Dict, Optional
 
 from game.card_catalog import (
     get_card, is_creature, card_has_haste, card_has_first_strike,
-    card_has_double_strike, card_has_defender
+    card_has_double_strike, card_has_defender, card_has_flying
 )
 from core.utils import generate_stack_id
 
@@ -27,6 +27,8 @@ class Permanent:
         self._temporary_bonus = {'power': 0, 'toughness': 0}
         self._protected = False
         self._pacified = False
+        self._regeneration_shield = 0
+        self.temporary_abilities = set()
 
     def to_dict(self, include_controller: bool = True) -> Dict:
         """Convert to dictionary for JSON serialization."""
@@ -77,6 +79,15 @@ class Permanent:
     def has_vigilance(self) -> bool:
         return 'vigilance' in self.card_data.get('abilities', [])
 
+    def has_haste(self) -> bool:
+        return card_has_haste(self.card_data) or 'haste' in self.temporary_abilities
+
+    def has_flying(self) -> bool:
+        return card_has_flying(self.card_data)
+
+    def has_protection_from(self, color: str) -> bool:
+        return f'protection_{color.lower()}' in self.card_data.get('abilities', [])
+
     def get_power(self) -> int:
         """Get current power including modifiers."""
         base = self.card_data.get('power', 0)
@@ -104,7 +115,7 @@ class Permanent:
 class StackItem:
     """Represents an item on the stack."""
     
-    def __init__(self, card_id: str, controller: str, targets: list = None):
+    def __init__(self, card_id: str, controller: str, targets: list = None, kicked: bool = False):
         self.stack_item_id = generate_stack_id()
         self.card_id = card_id
         self.controller = controller
@@ -113,16 +124,20 @@ class StackItem:
         self.ability = None
         self.trigger_data = None
         self.resolved = False
+        self.kicked = kicked
 
     def to_pdu(self) -> Dict:
         """Convert to PDU dictionary."""
-        return {
+        pdu = {
             "stack_item_id": self.stack_item_id,
             "item_type": self.item_type,
             "source": getattr(self, 'source_id', self.card_id),
             "targets": self.targets,
             "controller": self.controller
         }
+        if self.kicked:
+            pdu["kicked"] = True
+        return pdu
 
 
 class Player:

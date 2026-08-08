@@ -144,6 +144,12 @@ class PriorityManager:
                     from game.card_catalog import is_creature, get_card
                     card = get_card(perm.card_id)
                     if card and is_creature(card):
+                        if (perm.get_toughness() > 0 and perm.damage >= perm.get_toughness()) and perm._regeneration_shield:
+                            perm._regeneration_shield -= 1
+                            perm.damage = 0
+                            perm.tapped = True
+                            actions_taken = True
+                            continue
                         if perm.get_toughness() <= 0 or perm.damage >= perm.get_toughness():
                             creatures_to_destroy.append(perm.id)
             
@@ -181,7 +187,7 @@ class PriorityManager:
 
         if item.item_type == "ABILITY":
             from game.card_effects import execute_card_effect
-            result = execute_card_effect(self.game, item.card_id, item.controller, item.targets, ability=item.ability)
+            result = execute_card_effect(self.game, item.card_id, item.controller, item.targets, ability=item.ability, kicked=item.kicked)
             if result.get('error'):
                 self.game.log(f"Effect error: {result['error']}")
             if result.get('state_changes'):
@@ -210,13 +216,13 @@ class PriorityManager:
                     })
                     self.game.trigger_manager.check_triggers('ETB', {
                         'permanent': perm,
-                        'kicked': False
+                        'kicked': item.kicked
                     })
                 else:
                     effect = card.get('effect')
                     if effect:
                         from game.card_effects import execute_card_effect
-                        result = execute_card_effect(self.game, item.card_id, item.controller, item.targets)
+                        result = execute_card_effect(self.game, item.card_id, item.controller, item.targets, kicked=item.kicked)
                         if result.get('error'):
                             self.game.log(f"Effect error: {result['error']}")
         
