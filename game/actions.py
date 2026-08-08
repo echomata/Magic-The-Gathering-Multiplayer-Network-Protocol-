@@ -3,9 +3,9 @@ from typing import Dict
 from core.models import Permanent, StackItem
 from game.card_catalog import (
     get_card, is_land, is_permanent, can_play_during_phase,
-    is_creature
+    is_creature, is_instant
 )
-from core.utils import generate_permanent_id, check_mana
+from core.utils import check_mana
 
 
 class ActionHandler:
@@ -151,6 +151,21 @@ class ActionHandler:
             self.game.send_error(conn, "WRONG_PHASE", f"Cannot play {card.get('type')} during {self.game.phase}", pdu)
             return
 
+        # Sorcery-speed restriction: sorceries, creatures, enchantments, and
+        # artifacts may only be cast by the active player, during a main
+        # phase, with an empty stack (RFC Figure 4: "sorcery speed for AP").
+        # Instants are exempt and may be cast by either player, any time
+        # they hold priority.
+        if not is_instant(card):
+            if player_id != self.game.active_player:
+                self.game.send_error(conn, "WRONG_PHASE",
+                                   "Only the active player may cast at sorcery speed", pdu)
+                return
+            if self.game.stack:
+                self.game.send_error(conn, "WRONG_PHASE",
+                                   "Cannot cast at sorcery speed while the stack is not empty", pdu)
+                return
+
         mana_payment = pdu.get('mana_payment', {})
         mana_cost = card.get('mana_cost', {})
         if not check_mana(mana_payment, mana_cost):
@@ -202,6 +217,11 @@ class ActionHandler:
             self.game.send_error(conn, "WRONG_PHASE", "Can only play lands in Main Phase", pdu)
             return
 
+        if self.game.stack:
+            self.game.send_error(conn, "WRONG_PHASE",
+                               "Cannot play a land while the stack is not empty", pdu)
+            return
+
         card_id = pdu.get('card_id')
         card = get_card(card_id)
         if not card or not is_land(card):
@@ -213,7 +233,8 @@ class ActionHandler:
             return
 
         self.game.players[player_id]['hand'].remove(card_id)
-        perm = Permanent(card_id, player_id, generate_permanent_id())
+        # Per RFC 10.2.2, a permanent's id is its own card instance id.
+        perm = Permanent(card_id, player_id, card_id)
         self.game.players[player_id]['battlefield'].append(perm)
         self.game.land_played_this_turn = True
 

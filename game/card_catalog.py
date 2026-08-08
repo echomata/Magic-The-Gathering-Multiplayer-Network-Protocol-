@@ -33,16 +33,16 @@ MASTER_CARDS = {
                     "mana_cost": {"R": 1}, "power": None, "toughness": None, "abilities": [], 
                     "effect": "deal_damage_to_creature", "effect_value": 4, "copies": 4},
     "searing_spear": {"name": "Searing Spear", "type": "Instant", "subtype": "", "color": "R", "cmc": 2, 
-                      "mana_cost": {"R": 1, "generic": 1}, "power": None, "toughness": None, "abilities": [], 
+                      "mana_cost": {"R": 1, "X": 1}, "power": None, "toughness": None, "abilities": [], 
                       "effect": "deal_damage", "effect_value": 3, "copies": 4},
     "skullcrack": {"name": "Skullcrack", "type": "Instant", "subtype": "", "color": "R", "cmc": 2, 
-                   "mana_cost": {"R": 1, "generic": 1}, "power": None, "toughness": None, "abilities": [], 
+                   "mana_cost": {"R": 1, "X": 1}, "power": None, "toughness": None, "abilities": [], 
                    "effect": "deal_damage_no_prevent", "effect_value": 3, "copies": 4},
     "rift_bolt": {"name": "Rift Bolt", "type": "Sorcery", "subtype": "", "color": "R", "cmc": 3, 
-                  "mana_cost": {"R": 1, "generic": 2}, "power": None, "toughness": None, 
+                  "mana_cost": {"R": 1, "X": 2}, "power": None, "toughness": None, 
                   "abilities": ["suspend_1_R"], "effect": "deal_damage", "effect_value": 3, "copies": 4},
     "incinerate": {"name": "Incinerate", "type": "Instant", "subtype": "", "color": "R", "cmc": 2, 
-                   "mana_cost": {"R": 1, "generic": 1}, "power": None, "toughness": None, "abilities": [], 
+                   "mana_cost": {"R": 1, "X": 1}, "power": None, "toughness": None, "abilities": [], 
                    "effect": "deal_damage_no_regen", "effect_value": 3, "copies": 4},
     
     # Red Creatures
@@ -55,7 +55,7 @@ MASTER_CARDS = {
                            "abilities": ["kicker_1R", "bushwhacker_trigger", "enters_battlefield"], 
                            "effect": None, "effect_value": None, "copies": 4},
     "reckless_wurm": {"name": "Reckless Wurm", "type": "Creature", "subtype": "Wurm", "color": "R", "cmc": 5, 
-                      "mana_cost": {"R": 1, "generic": 3}, "power": 4, "toughness": 4, 
+                      "mana_cost": {"R": 1, "X": 3}, "power": 4, "toughness": 4, 
                       "abilities": ["trample", "madness_2R", "enters_battlefield"], 
                       "effect": None, "effect_value": None, "copies": 4},
     "monastery_swiftspear": {"name": "Monastery Swiftspear", "type": "Creature", "subtype": "Human Monk", "color": "R", "cmc": 1, 
@@ -63,7 +63,7 @@ MASTER_CARDS = {
                              "abilities": ["haste", "prowess", "enters_battlefield"], 
                              "effect": None, "effect_value": None, "copies": 4},
     "wall_of_stone": {"name": "Wall of Stone", "type": "Creature", "subtype": "Wall", "color": "R", "cmc": 3, 
-                      "mana_cost": {"R": 2, "generic": 1}, "power": 0, "toughness": 8, 
+                      "mana_cost": {"R": 2, "X": 1}, "power": 0, "toughness": 8, 
                       "abilities": ["defender", "enters_battlefield"], 
                       "effect": None, "effect_value": None, "copies": 4},
     
@@ -72,7 +72,7 @@ MASTER_CARDS = {
                      "mana_cost": {"U": 2}, "power": None, "toughness": None, "abilities": [], 
                      "effect": "counter", "effect_value": None, "copies": 4},
     "cancel": {"name": "Cancel", "type": "Instant", "subtype": "", "color": "U", "cmc": 3, 
-               "mana_cost": {"U": 2, "generic": 1}, "power": None, "toughness": None, "abilities": [], 
+               "mana_cost": {"U": 2, "X": 1}, "power": None, "toughness": None, "abilities": [], 
                "effect": "counter", "effect_value": None, "copies": 4},
     "unsummon": {"name": "Unsummon", "type": "Instant", "subtype": "", "color": "U", "cmc": 1, 
                  "mana_cost": {"U": 1}, "power": None, "toughness": None, "abilities": [], 
@@ -81,23 +81,23 @@ MASTER_CARDS = {
                "mana_cost": {"U": 1}, "power": None, "toughness": None, "abilities": [], 
                "effect": "ponder", "effect_value": None, "copies": 4},
     "negate": {"name": "Negate", "type": "Instant", "subtype": "", "color": "U", "cmc": 2, 
-               "mana_cost": {"U": 1, "generic": 1}, "power": None, "toughness": None, "abilities": [], 
+               "mana_cost": {"U": 1, "X": 1}, "power": None, "toughness": None, "abilities": [], 
                "effect": "counter_noncreature", "effect_value": None, "copies": 4},
     "mana_leak": {"name": "Mana Leak", "type": "Instant", "subtype": "", "color": "U", "cmc": 2, 
-                  "mana_cost": {"U": 1, "generic": 1}, "power": None, "toughness": None, "abilities": [], 
+                  "mana_cost": {"U": 1, "X": 1}, "power": None, "toughness": None, "abilities": [], 
                   "effect": "mana_leak", "effect_value": 3, "copies": 4},
     
     # Blue Creatures
     "merfolk_looter": {"name": "Merfolk Looter", "type": "Creature", "subtype": "Merfolk Rogue", "color": "U", "cmc": 2, 
-                       "mana_cost": {"U": 1, "generic": 1}, "power": 1, "toughness": 1, 
+                       "mana_cost": {"U": 1, "X": 1}, "power": 1, "toughness": 1, 
                        "abilities": ["loot", "enters_battlefield"], 
                        "effect": None, "effect_value": None, "copies": 4},
     "prodigal_sorcerer": {"name": "Prodigal Sorcerer", "type": "Creature", "subtype": "Human Wizard", "color": "U", "cmc": 3, 
-                          "mana_cost": {"U": 1, "generic": 2}, "power": 1, "toughness": 1, 
+                          "mana_cost": {"U": 1, "X": 2}, "power": 1, "toughness": 1, 
                           "abilities": ["ping", "enters_battlefield"], 
                           "effect": None, "effect_value": None, "copies": 4},
     "air_elemental": {"name": "Air Elemental", "type": "Creature", "subtype": "Elemental", "color": "U", "cmc": 5, 
-                      "mana_cost": {"U": 2, "generic": 3}, "power": 4, "toughness": 4, 
+                      "mana_cost": {"U": 2, "X": 3}, "power": 4, "toughness": 4, 
                       "abilities": ["flying", "enters_battlefield"], 
                       "effect": None, "effect_value": None, "copies": 4},
     "phantasmal_bear": {"name": "Phantasmal Bear", "type": "Creature", "subtype": "Bear Illusion", "color": "U", "cmc": 1, 
@@ -110,10 +110,10 @@ MASTER_CARDS = {
                      "mana_cost": {"G": 1}, "power": None, "toughness": None, "abilities": [], 
                      "effect": "giant_growth", "effect_value": 3, "copies": 4},
     "rampant_growth": {"name": "Rampant Growth", "type": "Sorcery", "subtype": "", "color": "G", "cmc": 2, 
-                       "mana_cost": {"G": 1, "generic": 1}, "power": None, "toughness": None, "abilities": [], 
+                       "mana_cost": {"G": 1, "X": 1}, "power": None, "toughness": None, "abilities": [], 
                        "effect": "rampant_growth", "effect_value": None, "copies": 4},
     "naturalize": {"name": "Naturalize", "type": "Instant", "subtype": "", "color": "G", "cmc": 2, 
-                   "mana_cost": {"G": 1, "generic": 1}, "power": None, "toughness": None, "abilities": [], 
+                   "mana_cost": {"G": 1, "X": 1}, "power": None, "toughness": None, "abilities": [], 
                    "effect": "naturalize", "effect_value": None, "copies": 4},
     "vines_of_vastwood": {"name": "Vines of Vastwood", "type": "Instant", "subtype": "", "color": "G", "cmc": 1, 
                           "mana_cost": {"G": 1}, "power": None, "toughness": None, 
@@ -129,7 +129,7 @@ MASTER_CARDS = {
                       "abilities": ["mana_G", "enters_battlefield"], 
                       "effect": "mana", "effect_value": "G", "copies": 4},
     "grizzly_bears": {"name": "Grizzly Bears", "type": "Creature", "subtype": "Bear", "color": "G", "cmc": 2, 
-                      "mana_cost": {"G": 1, "generic": 1}, "power": 2, "toughness": 2, 
+                      "mana_cost": {"G": 1, "X": 1}, "power": 2, "toughness": 2, 
                       "abilities": ["enters_battlefield"], 
                       "effect": None, "effect_value": None, "copies": 4},
     "leatherback_baloth": {"name": "Leatherback Baloth", "type": "Creature", "subtype": "Beast", "color": "G", "cmc": 3, 
@@ -137,7 +137,7 @@ MASTER_CARDS = {
                            "abilities": ["enters_battlefield"], 
                            "effect": None, "effect_value": None, "copies": 4},
     "troll_ascetic": {"name": "Troll Ascetic", "type": "Creature", "subtype": "Troll Shaman", "color": "G", "cmc": 3, 
-                      "mana_cost": {"G": 2, "generic": 1}, "power": 3, "toughness": 2, 
+                      "mana_cost": {"G": 2, "X": 1}, "power": 3, "toughness": 2, 
                       "abilities": ["hexproof", "regenerate", "enters_battlefield"], 
                       "effect": None, "effect_value": None, "copies": 4},
     
@@ -152,7 +152,7 @@ MASTER_CARDS = {
                       "mana_cost": {"W": 1}, "power": None, "toughness": None, "abilities": [], 
                       "effect": "healing_salve", "effect_value": 3, "copies": 4},
     "pacifism": {"name": "Pacifism", "type": "Enchantment", "subtype": "Aura", "color": "W", "cmc": 2, 
-                 "mana_cost": {"W": 1, "generic": 1}, "power": None, "toughness": None, "abilities": [], 
+                 "mana_cost": {"W": 1, "X": 1}, "power": None, "toughness": None, "abilities": [], 
                  "effect": "pacifism", "effect_value": None, "copies": 4},
     
     # White Creatures
@@ -161,7 +161,7 @@ MASTER_CARDS = {
                      "abilities": ["first_strike", "protection_black", "enters_battlefield"], 
                      "effect": None, "effect_value": None, "copies": 4},
     "serra_angel": {"name": "Serra Angel", "type": "Creature", "subtype": "Angel", "color": "W", "cmc": 5, 
-                    "mana_cost": {"W": 2, "generic": 3}, "power": 4, "toughness": 4, 
+                    "mana_cost": {"W": 2, "X": 3}, "power": 4, "toughness": 4, 
                     "abilities": ["flying", "vigilance", "enters_battlefield"], 
                     "effect": None, "effect_value": None, "copies": 4},
     "savannah_lions": {"name": "Savannah Lions", "type": "Creature", "subtype": "Cat", "color": "W", "cmc": 1, 
@@ -178,29 +178,29 @@ MASTER_CARDS = {
                     "mana_cost": {"B": 1}, "power": None, "toughness": None, "abilities": [], 
                     "effect": "dark_ritual", "effect_value": None, "copies": 4},
     "terror": {"name": "Terror", "type": "Instant", "subtype": "", "color": "B", "cmc": 2, 
-               "mana_cost": {"B": 1, "generic": 1}, "power": None, "toughness": None, "abilities": [], 
+               "mana_cost": {"B": 1, "X": 1}, "power": None, "toughness": None, "abilities": [], 
                "effect": "terror", "effect_value": None, "copies": 4},
     "doom_blade": {"name": "Doom Blade", "type": "Instant", "subtype": "", "color": "B", "cmc": 2, 
-                   "mana_cost": {"B": 1, "generic": 1}, "power": None, "toughness": None, "abilities": [], 
+                   "mana_cost": {"B": 1, "X": 1}, "power": None, "toughness": None, "abilities": [], 
                    "effect": "doom_blade", "effect_value": None, "copies": 4},
     "raise_dead": {"name": "Raise Dead", "type": "Sorcery", "subtype": "", "color": "B", "cmc": 1, 
                    "mana_cost": {"B": 1}, "power": None, "toughness": None, "abilities": [], 
                    "effect": "raise_dead", "effect_value": None, "copies": 4},
     "mind_rot": {"name": "Mind Rot", "type": "Sorcery", "subtype": "", "color": "B", "cmc": 3, 
-                 "mana_cost": {"B": 1, "generic": 2}, "power": None, "toughness": None, "abilities": [], 
+                 "mana_cost": {"B": 1, "X": 2}, "power": None, "toughness": None, "abilities": [], 
                  "effect": "mind_rot", "effect_value": None, "copies": 4},
     
     # Black Creatures
     "gray_merchant": {"name": "Gray Merchant of Asphodel", "type": "Creature", "subtype": "Zombie", "color": "B", "cmc": 5, 
-                      "mana_cost": {"B": 2, "generic": 3}, "power": 2, "toughness": 4, 
+                      "mana_cost": {"B": 2, "X": 3}, "power": 2, "toughness": 4, 
                       "abilities": ["devotion_black", "lifedrain", "enters_battlefield"], 
                       "effect": "gray_merchant", "effect_value": 0, "copies": 4},
     "gravedigger": {"name": "Gravedigger", "type": "Creature", "subtype": "Zombie", "color": "B", "cmc": 4, 
-                    "mana_cost": {"B": 1, "generic": 3}, "power": 2, "toughness": 2, 
+                    "mana_cost": {"B": 1, "X": 3}, "power": 2, "toughness": 2, 
                     "abilities": ["gravedigger_trigger", "enters_battlefield"], 
                     "effect": None, "effect_value": None, "copies": 4},
     "royal_assassin": {"name": "Royal Assassin", "type": "Creature", "subtype": "Human Assassin", "color": "B", "cmc": 3, 
-                       "mana_cost": {"B": 2, "generic": 1}, "power": 1, "toughness": 1, 
+                       "mana_cost": {"B": 2, "X": 1}, "power": 1, "toughness": 1, 
                        "abilities": ["assassinate", "enters_battlefield"], 
                        "effect": None, "effect_value": None, "copies": 4},
     "black_knight": {"name": "Black Knight", "type": "Creature", "subtype": "Human Knight", "color": "B", "cmc": 2, 
@@ -210,17 +210,17 @@ MASTER_CARDS = {
     
     # Colorless Artifacts
     "sol_ring": {"name": "Sol Ring", "type": "Artifact", "subtype": "", "color": "C", "cmc": 1, 
-                 "mana_cost": {"generic": 1}, "power": None, "toughness": None, 
+                 "mana_cost": {"X": 1}, "power": None, "toughness": None, 
                  "abilities": ["mana_CC"], "effect": "mana", "effect_value": "CC", "copies": 4},
     "ornithopter": {"name": "Ornithopter", "type": "Artifact Creature", "subtype": "Thopter", "color": "C", "cmc": 0, 
                     "mana_cost": {}, "power": 0, "toughness": 2, 
                     "abilities": ["flying", "enters_battlefield"], 
                     "effect": None, "effect_value": None, "copies": 4},
     "millstone": {"name": "Millstone", "type": "Artifact", "subtype": "", "color": "C", "cmc": 2, 
-                  "mana_cost": {"generic": 2}, "power": None, "toughness": None, 
+                  "mana_cost": {"X": 2}, "power": None, "toughness": None, 
                   "abilities": ["mill"], "effect": None, "effect_value": None, "copies": 4},
     "rod_of_ruin": {"name": "Rod of Ruin", "type": "Artifact", "subtype": "", "color": "C", "cmc": 4, 
-                    "mana_cost": {"generic": 4}, "power": None, "toughness": None, 
+                    "mana_cost": {"X": 4}, "power": None, "toughness": None, 
                     "abilities": ["ping_artifact"], "effect": None, "effect_value": None, "copies": 4},
 }
 
@@ -233,11 +233,10 @@ def generate_card_instances():
     for base_id, card_data in MASTER_CARDS.items():
         copies = card_data.get('copies', 1)
         for i in range(1, copies + 1):
-            # Special formatting for lands
-            if base_id in ["mountain", "forest", "plains", "island", "swamp"]:
-                instance_id = f"{base_id}_{i:02d}"
-            else:
-                instance_id = f"{base_id}_{i:03d}"
+            # All card instance IDs use 3-digit, zero-padded suffixes
+            # (e.g. "mountain_001"), matching the RFC's examples and the
+            # official card list. Basic lands are NOT a special case.
+            instance_id = f"{base_id}_{i:03d}"
             
             CARD_CATALOG[instance_id] = {
                 "name": card_data["name"],
@@ -310,6 +309,10 @@ def card_has_flying(card: dict) -> bool:
 
 def card_has_first_strike(card: dict) -> bool:
     return 'first_strike' in card.get('abilities', [])
+
+
+def card_has_double_strike(card: dict) -> bool:
+    return 'double_strike' in card.get('abilities', [])
 
 
 def card_has_defender(card: dict) -> bool:

@@ -3,7 +3,13 @@ import random
 import time
 from typing import List, Optional
 
-from game.card_catalog import get_card, is_creature, is_land
+# NOTE: game.card_catalog is imported lazily inside the functions below
+# (not at module load time). core/models.py imports from core/utils.py,
+# and game/__init__.py's import chain eventually imports core/models.py -
+# so a top-level "from game.card_catalog import ..." here creates a
+# circular import if core.utils happens to be the first module touched in
+# a fresh process. Importing inside the functions that actually need it
+# sidesteps that regardless of import order.
 
 
 def shuffle_deck(deck: List[str]) -> List[str]:
@@ -50,6 +56,7 @@ def check_mana(payment: dict, cost: dict) -> bool:
 
 def get_devotion(permanents: List, color: str) -> int:
     """Calculate devotion to a color from a list of permanents."""
+    from game.card_catalog import get_card
     devotion = 0
     for perm in permanents:
         card = get_card(perm.card_id)
@@ -60,6 +67,7 @@ def get_devotion(permanents: List, color: str) -> int:
 
 def get_legal_targets(card_id: str, game_state: dict, player_id: str) -> List[str]:
     """Get legal targets for a spell or ability."""
+    from game.card_catalog import get_card, is_creature
     card = get_card(card_id)
     if not card:
         return []

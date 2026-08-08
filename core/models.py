@@ -1,7 +1,10 @@
 """Data models for MTGNP game state."""
 from typing import Dict, Optional
 
-from game.card_catalog import get_card, is_creature, card_has_haste, card_has_first_strike
+from game.card_catalog import (
+    get_card, is_creature, card_has_haste, card_has_first_strike,
+    card_has_double_strike, card_has_defender
+)
 from core.utils import generate_stack_id
 
 
@@ -57,6 +60,8 @@ class Permanent:
             return False
         if self._pacified:
             return False
+        if card_has_defender(self.card_data):
+            return False
         return True
 
     def can_block(self) -> bool:
@@ -87,6 +92,10 @@ class Permanent:
     def has_first_strike(self) -> bool:
         """Check if this creature has first strike."""
         return card_has_first_strike(self.card_data)
+
+    def has_double_strike(self) -> bool:
+        """Check if this creature has double strike."""
+        return card_has_double_strike(self.card_data)
 
 
 class StackItem:

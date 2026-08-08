@@ -8,7 +8,7 @@ from core.constants import DEFAULT_PORT
 from network.server import MTGNPServer
 from network.client import MTGNPClient
 from network.spectator import SpectatorClient
-from game.card_catalog import list_available_cards
+from game.card_catalog import list_available_cards, get_card
 from core.game_logger import GameLogger
 
 
@@ -72,7 +72,7 @@ def run_client_interactive(client):
             elif command == 'help':
                 print("Commands: help, hand, state, pass, concede, mulligan, cast, activate, land, attack, block, order_damage, discard, trigger, list, quit")
             elif command == 'hand':
-                hand = client.game_state.get('hand', [])
+                hand = client.game_state.get('hand', {}).get(client.player_id, [])
                 print(f"Hand ({len(hand)} cards):")
                 for i, card_id in enumerate(hand):
                     from game.card_catalog import get_card
@@ -103,9 +103,13 @@ def run_client_interactive(client):
             elif command == 'cast' and len(parts) >= 2:
                 card_id = parts[1]
                 targets = parts[2:] if len(parts) > 2 else []
-                mana_payment = {'R': 1}
+                # Look up the card's actual mana cost instead of assuming
+                # every spell costs a single red mana. (Cost keys are
+                # color letters plus "X" for generic, matching the RFC.)
+                card = get_card(card_id)
+                mana_payment = dict(card.get('mana_cost', {})) if card else {}
                 client.send_cast_spell(card_id, targets, mana_payment)
-                print(f"Casting {card_id}")
+                print(f"Casting {card_id} paying {mana_payment}")
             elif command == 'activate' and len(parts) >= 3:
                 source_id = parts[1]
                 ability_index = int(parts[2])

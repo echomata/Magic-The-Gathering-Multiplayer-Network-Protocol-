@@ -12,16 +12,26 @@ class CombatSystem:
         self.damage_order = {}
         self.first_strike_done = False
 
+    @staticmethod
+    def _deals_damage_in_pass(perm, first_strike_only: bool) -> bool:
+        """Whether a creature deals damage in this pass of combat damage.
+
+        Per RFC 9.6/9.7: first-strike (and double-strike) creatures deal
+        damage in the First Strike Damage Step. The regular Combat Damage
+        Step then deals damage for everyone EXCEPT creatures that have
+        first strike but NOT double strike (they already dealt their
+        damage). Double-strike creatures deal damage in both steps.
+        """
+        has_fs = perm.has_first_strike()
+        has_ds = perm.has_double_strike()
+        if first_strike_only:
+            return has_fs or has_ds
+        return has_ds or not has_fs
+
     def deal_combat_damage(self, first_strike_only: bool = False):
         """Deal combat damage."""
         damage_events = []
         creatures_died = []
-
-        fs_attackers = set()
-        for attack in self.attackers:
-            perm = self.game.find_permanent(attack.get('creature_id'))
-            if perm and perm.has_first_strike():
-                fs_attackers.add(attack.get('creature_id'))
 
         for attack in self.attackers:
             creature_id = attack.get('creature_id')
@@ -31,8 +41,7 @@ class CombatSystem:
             if not perm:
                 continue
 
-            has_fs = perm.has_first_strike()
-            if first_strike_only and not has_fs:
+            if not self._deals_damage_in_pass(perm, first_strike_only):
                 continue
 
             power = perm.get_power()
@@ -84,8 +93,7 @@ class CombatSystem:
             if not perm:
                 continue
 
-            has_fs = perm.has_first_strike()
-            if first_strike_only and not has_fs:
+            if not self._deals_damage_in_pass(perm, first_strike_only):
                 continue
 
             power = perm.get_power()

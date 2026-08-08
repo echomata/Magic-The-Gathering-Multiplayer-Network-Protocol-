@@ -97,21 +97,25 @@ class TurnEngine:
         self.game.phase = "DECLARE_ATTACKERS"
         self.game.log("DECLARE_ATTACKERS step")
 
-        self.game.broadcast_phase_transition("BEGIN_COMBAT", "DECLARE_ATTACKERS")
+        phase_seq = self.game.broadcast_phase_transition("BEGIN_COMBAT", "DECLARE_ATTACKERS")
         self.game.broadcast_game_state()
 
-        self.game.priority_manager.grant_priority(self.game.active_player)
+        # Per RFC 9.3: no separate request PDU is defined here - the
+        # PHASE_TRANSITION above IS the signal, and the client echoes ITS
+        # seq_num on the DECLARE_ATTACKERS PDU.
+        self.game.priority_manager.expect_action(self.game.active_player, phase_seq)
 
     def do_declare_blockers(self):
         """Handle DECLARE_BLOCKERS step."""
         self.game.phase = "DECLARE_BLOCKERS"
         self.game.log("DECLARE_BLOCKERS step")
 
-        self.game.broadcast_phase_transition("DECLARE_ATTACKERS", "DECLARE_BLOCKERS")
+        phase_seq = self.game.broadcast_phase_transition("DECLARE_ATTACKERS", "DECLARE_BLOCKERS")
         self.game.broadcast_game_state()
 
+        # Per RFC 9.4: same implicit-request pattern as Declare Attackers.
         nap = self.game.get_other_player(self.game.active_player)
-        self.game.priority_manager.grant_priority(nap)
+        self.game.priority_manager.expect_action(nap, phase_seq)
 
     def do_assign_damage_order(self):
         """Handle ASSIGN_DAMAGE_ORDER step."""
@@ -130,10 +134,11 @@ class TurnEngine:
             self.do_combat_damage()
             return
 
-        self.game.broadcast_phase_transition("DECLARE_BLOCKERS", "ASSIGN_DAMAGE_ORDER")
+        phase_seq = self.game.broadcast_phase_transition("DECLARE_BLOCKERS", "ASSIGN_DAMAGE_ORDER")
         self.game.broadcast_game_state()
 
-        self.game.priority_manager.grant_priority(self.game.active_player)
+        # Per RFC 9.5: same implicit-request pattern.
+        self.game.priority_manager.expect_action(self.game.active_player, phase_seq)
 
     def do_first_strike_damage(self):
         """Handle FIRST_STRIKE_DAMAGE step (optional)."""

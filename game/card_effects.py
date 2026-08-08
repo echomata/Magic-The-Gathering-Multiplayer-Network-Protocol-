@@ -2,7 +2,6 @@
 from typing import Dict, List, Optional, Any
 from game.card_catalog import get_card, is_creature, is_land, is_permanent, is_artifact, is_enchantment
 from core.models import Permanent
-from core.utils import generate_permanent_id
 
 
 class CardEffect:
@@ -244,7 +243,8 @@ class CardEffect:
             card = get_card(card_id)
             if card and is_land(card):
                 library.pop(i)
-                perm = Permanent(card_id, self.controller, generate_permanent_id())
+                # Per RFC 10.2.2, a permanent's id is its own card instance id.
+                perm = Permanent(card_id, self.controller, card_id)
                 perm.tapped = True
                 player['battlefield'].append(perm)
                 changes.append({

@@ -23,6 +23,7 @@ class MTGNPClient:
         self.running = True
         self.game_state = {}
         self._last_priority_seq = None
+        self._last_phase_transition_seq = None
         self.last_pong_time = time.time()
         self.pending_trigger_order = None
         self.pending_trigger_choice = None
@@ -98,6 +99,7 @@ class MTGNPClient:
         elif pdu_type == 'PRIORITY_GRANT':
             self._handle_priority(pdu)
         elif pdu_type == 'PHASE_TRANSITION':
+            self._last_phase_transition_seq = pdu.get('seq_num')
             self.log(f"Phase transition: {pdu.get('from_phase')} -> {pdu.get('to_phase')}")
         elif pdu_type == 'TRIGGER_ORDER':
             self.pending_trigger_order = pdu
@@ -122,15 +124,15 @@ class MTGNPClient:
             self.game_state = {}
 
     def _handle_priority(self, pdu: Dict):
-        """Handle PRIORITY_GRANT PDU."""
+        """Handle PRIORITY_GRANT PDU.
+
+        Per the RFC, PRIORITY_GRANT is sent (S->C) only to the single client
+        that currently holds priority, so this client only ever receives one
+        addressed to itself.
+        """
         seq_num = pdu.get('seq_num')
         self._last_priority_seq = seq_num
-
-        if pdu.get('player_id') != self.player_id:
-            self.log(f"Priority granted to {pdu.get('player_id')} - auto passing")
-            self.pass_priority(seq_num)
-        else:
-            self.log(f"Priority granted to {self.player_id} (seq={seq_num})")
+        self.log(f"Priority granted to {self.player_id} (seq={seq_num})")
 
     def _render_state(self):
         """Render the current game state."""
@@ -139,7 +141,10 @@ class MTGNPClient:
 
         phase = self.game_state.get('phase', 'UNKNOWN')
         life_totals = self.game_state.get('life_totals', {})
-        hand = self.game_state.get('hand', [])
+        # Per the RFC (10.2.2) and game/state.py, "hand" is an object keyed by
+        # player_id (e.g. {"player_1": [...]}), not a flat list. Pull out our
+        # own hand specifically.
+        hand = self.game_state.get('hand', {}).get(self.player_id, [])
         hand_counts = self.game_state.get('hand_counts', {})
         battlefield = self.game_state.get('battlefield', {})
         stack = self.game_state.get('stack', [])
@@ -274,9 +279,13 @@ class MTGNPClient:
         self.send_pdu(pdu)
 
     def send_declare_attackers(self, attackers: List[Dict], seq_num: int = None):
-        """Send DECLARE_ATTACKERS PDU."""
+        """Send DECLARE_ATTACKERS PDU.
+
+        Per RFC 5.4/9.3: no PRIORITY_GRANT is sent for this step - echo the
+        seq_num of the PHASE_TRANSITION that announced DECLARE_ATTACKERS.
+        """
         if seq_num is None:
-            seq_num = self._last_priority_seq
+            seq_num = self._last_phase_transition_seq
         pdu = {
             "type": "DECLARE_ATTACKERS",
             "seq_num": seq_num,
@@ -285,9 +294,13 @@ class MTGNPClient:
         self.send_pdu(pdu)
 
     def send_declare_blockers(self, blockers: List[Dict], seq_num: int = None):
-        """Send DECLARE_BLOCKERS PDU."""
+        """Send DECLARE_BLOCKERS PDU.
+
+        Per RFC 5.4/9.4: echo the seq_num of the PHASE_TRANSITION that
+        announced DECLARE_BLOCKERS.
+        """
         if seq_num is None:
-            seq_num = self._last_priority_seq
+            seq_num = self._last_phase_transition_seq
         pdu = {
             "type": "DECLARE_BLOCKERS",
             "seq_num": seq_num,
@@ -317,10 +330,14 @@ class MTGNPClient:
         self.send_pdu(pdu)
 
     def send_assign_damage_order(self, attacker_id: str, blocker_order: list):
-        """Send ASSIGN_DAMAGE_ORDER PDU."""
+        """Send ASSIGN_DAMAGE_ORDER PDU.
+
+        Per RFC 5.4/9.5: echo the seq_num of the PHASE_TRANSITION that
+        announced ASSIGN_DAMAGE_ORDER.
+        """
         pdu = {
             "type": "ASSIGN_DAMAGE_ORDER",
-            "seq_num": self._last_priority_seq,
+            "seq_num": self._last_phase_transition_seq,
             "attacker_id": attacker_id,
             "blocker_order": blocker_order
         }

@@ -1,7 +1,7 @@
 """Game lifecycle management: LOBBY, SETUP, MULLIGAN, GAME_OVER."""
 import random
 from typing import Dict
-from core.constants import INITIAL_LIFE, HAND_SIZE, MIN_DECK_SIZE, MAX_DECK_SIZE
+from core.constants import INITIAL_LIFE, HAND_SIZE, MIN_DECK_SIZE, MAX_DECK_SIZE, RECONNECT_TIMEOUT
 from core.models import Permanent
 from core.utils import generate_permanent_id
 
@@ -238,6 +238,6 @@ class LifecycleManager:
                     if winner_id:
                         self.end_game(winner_id, "DISCONNECT")
                         
-        timer = threading.Timer(10.0, timeout_check)
+        timer = threading.Timer(RECONNECT_TIMEOUT, timeout_check)
         timer.daemon = True
         timer.start()
