@@ -38,6 +38,8 @@ class TurnEngine:
                     perm._regeneration_shield = 0
                     perm._pacified = False
                     perm._protected = False
+                    perm._hexproof = False
+                    perm._temporary_protection_color = None
                     perm.summoning_sick = False
 
         self.game.land_played_this_turn = False

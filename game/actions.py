@@ -171,8 +171,9 @@ class ActionHandler:
             return "This spell can only target a player"
         if creature_only and (not perm or not is_creature(target_card)):
             return "This spell must target a creature"
-        if perm and getattr(perm, '_protected', False) and perm.controller != player_id:
-            return "Target has protection"
+        if perm and perm.controller != player_id:
+            if getattr(perm, '_hexproof', False) or 'hexproof' in perm.card_data.get('abilities', []):
+                return "Target has hexproof"
         if perm and perm.has_protection_from(card.get('color', '')) and perm.controller != player_id:
             return "Target has protection from this spell's color"
         if artifact_or_enchantment and (not perm or not (is_artifact(target_card) or is_enchantment(target_card))):
@@ -585,6 +586,28 @@ class ActionHandler:
         if not isinstance(targets, list):
             self.game.send_error(conn, "ILLEGAL_TARGET", "targets must be an array", pdu)
             return
+
+        required_tap = ability.startswith('mana_') or ability in {
+            'loot', 'ping', 'ping_artifact', 'assassinate',
+            'protection_giver', 'mill'
+        }
+        required_mana = {
+            'mill': {'X': 2},
+            'ping_artifact': {'X': 3},
+            'regenerate': {'G': 1, 'X': 1},
+        }.get(ability, {})
+        if bool(cost_payment.get('tap', False)) != required_tap:
+            self.game.send_error(conn, "ILLEGAL_ACTION", "Incorrect tap cost for activated ability", pdu)
+            return
+        if not check_mana(mana_payment, required_mana):
+            self.game.send_error(conn, "INSUFFICIENT_MANA", "Activated ability cost is insufficient", pdu)
+            return
+        if not isinstance(mana_payment, dict):
+            self.game.send_error(conn, "ILLEGAL_ACTION", "cost_payment.mana must be an object", pdu)
+            return
+        if not isinstance(targets, list):
+            self.game.send_error(conn, "ILLEGAL_TARGET", "targets must be an array", pdu)
+            return
         if ability in {'ping', 'ping_artifact', 'assassinate', 'mill', 'protection_giver', 'regenerate'} and len(targets) != 1:
             self.game.send_error(conn, "ILLEGAL_TARGET", "This ability requires exactly one target", pdu)
             return
@@ -610,15 +633,14 @@ class ActionHandler:
             if not target_perm or target_perm.controller != player_id or not is_creature(target_perm.card_data):
                 self.game.send_error(conn, "ILLEGAL_TARGET", "Protection must target your creature", pdu)
                 return
+            if pdu.get('chosen_color') not in {'W', 'U', 'B', 'R', 'G'}:
+                self.game.send_error(conn, "ILLEGAL_ACTION", "chosen_color must be W, U, B, R, or G", pdu)
+                return
         if ability == 'regenerate':
             target_perm = self.game.find_permanent(targets[0])
             if target_perm is not perm:
                 self.game.send_error(conn, "ILLEGAL_TARGET", "Regenerate must target its source", pdu)
                 return
-            if mana_payment.get('G') != 1 or mana_payment.get('X') != 1:
-                self.game.send_error(conn, "INSUFFICIENT_MANA", "Regenerate costs {1}{G}", pdu)
-                return
-        
         requires_tap = cost_payment.get('tap', False)
         
         if ability.startswith('mana_'):
@@ -655,6 +677,8 @@ class ActionHandler:
         stack_item.item_type = "ABILITY"
         stack_item.source_id = source_id
         stack_item.ability = ability
+        if ability == 'protection_giver':
+            stack_item.ability_params = {'chosen_color': pdu.get('chosen_color')}
         self.game.stack.append(stack_item)
 
         pdu2 = {

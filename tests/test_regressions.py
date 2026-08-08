@@ -121,6 +121,37 @@ class ProtocolRegressionTests(unittest.TestCase):
         self.assertEqual(attacker.damage, 0)
         self.assertEqual(blocker.damage, 0)
 
+    def test_chosen_protection_color_is_applied(self):
+        game = make_game()
+        creature = Permanent("savannah_lions_001", "player_1", "lions", 1)
+        game.players["player_1"]["battlefield"] = [creature]
+        execute_card_effect(
+            game,
+            "mother_of_runes_001",
+            "player_1",
+            [creature.id],
+            ability="protection_giver",
+            ability_params={"chosen_color": "R"},
+        )
+        self.assertTrue(creature.has_protection_from("R"))
+        self.assertFalse(creature.has_protection_from("B"))
+
+    def test_static_hexproof_rejects_opponent_targeting(self):
+        from game.card_catalog import get_card
+
+        game = make_game()
+        troll = Permanent("troll_ascetic_001", "player_2", "troll", 1)
+        game.players["player_2"]["battlefield"] = [troll]
+        action = ActionHandler(game)
+        self.assertEqual(
+            action._validate_spell_targets(
+                get_card('flame_slash_001'),
+                [troll.id],
+                "player_1",
+            ),
+            "Target has hexproof",
+        )
+
     def test_trample_single_blocker_assigns_power_once(self):
         from game.combat import CombatSystem
 

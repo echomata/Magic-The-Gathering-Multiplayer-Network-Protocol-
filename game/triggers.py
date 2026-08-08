@@ -12,6 +12,7 @@ class TriggerManager:
         self.pending_triggers = []
         self.waiting_for_order = None
         self.waiting_for_choice = None
+        self.pending_trigger_groups = []
 
     def check_triggers(self, event_type: str, event_data: Dict):
         """Check for triggered abilities from a game event."""
@@ -98,21 +99,18 @@ class TriggerManager:
         ap_triggers = [t for t in triggers if t['controller'] == ap]
         nap_triggers = [t for t in triggers if t['controller'] != ap]
         
-        # AP triggers go on stack first (resolve last)
-        # NAP triggers go on top (resolve first)
-        ordered_triggers = ap_triggers + nap_triggers
-        
-        # If multiple triggers from same player, ask for order
-        if len(ap_triggers) > 1:
-            self._request_trigger_order(ap, ap_triggers)
-            return
-        if len(nap_triggers) > 1:
-            self._request_trigger_order(nap_triggers[0]['controller'], nap_triggers)
-            return
-        
-        # Put triggers on stack
-        for trigger in ordered_triggers:
-            self._put_trigger_on_stack(trigger)
+        # AP triggers are placed first, then NAP triggers. Each controller
+        # orders their own simultaneous triggers before the next group.
+        self.pending_trigger_groups = [group for group in (ap_triggers, nap_triggers) if group]
+        self._continue_trigger_groups()
+
+    def _continue_trigger_groups(self):
+        while self.pending_trigger_groups and not self.is_waiting():
+            group = self.pending_trigger_groups.pop(0)
+            if len(group) > 1:
+                self._request_trigger_order(group[0]['controller'], group)
+                return
+            self._put_trigger_on_stack(group[0])
 
 
     def resolve_trigger(self, trigger_data: Dict) -> Dict:
@@ -153,11 +151,16 @@ class TriggerManager:
                         
         elif effect == 'gravedigger_trigger':
             player = self.game.players[trigger_data['controller']]
-            for i, cid in enumerate(player['graveyard']):
+            chosen = trigger_data.get('trigger', {}).get('chosen_target')
+            candidates = [chosen] if chosen else list(player['graveyard'])
+            for cid in candidates:
+                if cid not in player['graveyard']:
+                    continue
                 from game.card_catalog import get_card, is_creature
                 c = get_card(cid)
                 if c and is_creature(c):
-                    card = player['graveyard'].pop(i)
+                    player['graveyard'].remove(cid)
+                    card = cid
                     player['hand'].append(card)
                     changes.append({'type': 'RETURN_TO_HAND', 'player': trigger_data['controller'], 'card': card})
                     break
@@ -203,6 +206,7 @@ class TriggerManager:
     def handle_trigger_order(self, conn, pdu: Dict):
         """Handle TRIGGER_ORDER_RESPONSE."""
         if not self.waiting_for_order:
+            self.game.send_error(conn, 'TRIGGER_ORDER_INVALID', 'No trigger order is pending', pdu)
             return
         
         player_id = self.game.get_player_by_conn(conn)
@@ -233,6 +237,8 @@ class TriggerManager:
         self.waiting_for_order = None
         
         if not self.is_waiting():
+            self._continue_trigger_groups()
+        if not self.is_waiting() and not self.pending_trigger_groups:
             self.game.broadcast_game_state()
             self.game.priority_manager.open_priority_window()
 
@@ -291,6 +297,7 @@ class TriggerManager:
     def handle_trigger_choice(self, conn, pdu: Dict):
         """Handle TRIGGER_CHOICE_RESPONSE."""
         if not self.waiting_for_choice:
+            self.game.send_error(conn, 'TRIGGER_CHOICE_INVALID', 'No trigger choice is pending', pdu)
             return
         
         player_id = self.game.get_player_by_conn(conn)
@@ -307,21 +314,21 @@ class TriggerManager:
             return
         
         accept = pdu.get('accept', False)
+        requires_target = trigger['trigger'].get('effect') == 'return_creature_from_graveyard'
         
         if accept:
-            # For return from graveyard, need target
-            if trigger['trigger'].get('effect') == 'return_creature_from_graveyard':
-                chosen_target = pdu.get('chosen_target')
-                if chosen_target:
-                    # Return card from graveyard to hand
-                    for pid, player in self.game.players.items():
-                        if chosen_target in player['graveyard']:
-                            player['graveyard'].remove(chosen_target)
-                            player['hand'].append(chosen_target)
-                            break
+            chosen_target = pdu.get('chosen_target')
+            if requires_target and chosen_target not in self._get_legal_trigger_targets(trigger):
+                self.game.send_error(conn, 'TRIGGER_CHOICE_INVALID', 'A legal target is required', pdu)
+                return
+            if not requires_target and chosen_target is not None:
+                self.game.send_error(conn, 'TRIGGER_CHOICE_INVALID', 'This trigger does not accept a target', pdu)
+                return
             non_optional_trigger = dict(trigger)
             non_optional_trigger['trigger'] = dict(trigger['trigger'])
             non_optional_trigger['trigger']['optional'] = False
+            if chosen_target:
+                non_optional_trigger['trigger']['chosen_target'] = chosen_target
             self._put_trigger_on_stack(non_optional_trigger)
         else:
             self.game.log(f"Trigger {trigger['trigger_id']} declined")
@@ -329,5 +336,7 @@ class TriggerManager:
         self.waiting_for_choice = None
         
         if not self.is_waiting():
+            self._continue_trigger_groups()
+        if not self.is_waiting() and not self.pending_trigger_groups:
             self.game.broadcast_game_state()
             self.game.priority_manager.open_priority_window()

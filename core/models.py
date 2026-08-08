@@ -28,6 +28,8 @@ class Permanent:
         self._protected = False
         self._pacified = False
         self._regeneration_shield = 0
+        self._hexproof = False
+        self._temporary_protection_color = None
         self.temporary_abilities = set()
 
     def to_dict(self, include_controller: bool = True) -> Dict:
@@ -86,7 +88,10 @@ class Permanent:
         return card_has_flying(self.card_data)
 
     def has_protection_from(self, color: str) -> bool:
-        return f'protection_{color.lower()}' in self.card_data.get('abilities', [])
+        return (
+            f'protection_{color.lower()}' in self.card_data.get('abilities', [])
+            or self._temporary_protection_color == color.upper()
+        )
 
     def get_power(self) -> int:
         """Get current power including modifiers."""
@@ -122,6 +127,7 @@ class StackItem:
         self.targets = targets or []
         self.item_type = "SPELL"
         self.ability = None
+        self.ability_params = {}
         self.trigger_data = None
         self.resolved = False
         self.kicked = kicked
@@ -137,6 +143,8 @@ class StackItem:
         }
         if self.kicked:
             pdu["kicked"] = True
+        if self.ability_params:
+            pdu["ability_params"] = self.ability_params
         return pdu
 
 

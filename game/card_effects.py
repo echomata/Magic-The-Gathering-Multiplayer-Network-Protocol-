@@ -7,7 +7,7 @@ from core.models import Permanent
 class CardEffect:
     """Base class for card effects."""
     
-    def __init__(self, game, card_id: str, controller: str, targets: List[str] = None, ability: str = None, kicked: bool = False):
+    def __init__(self, game, card_id: str, controller: str, targets: List[str] = None, ability: str = None, kicked: bool = False, ability_params: Dict = None):
         self.game = game
         self.card_id = card_id
         self.controller = controller
@@ -17,6 +17,7 @@ class CardEffect:
         self.effect_value = self.card.get('effect_value') if self.card else None
         self.ability = ability
         self.kicked = kicked
+        self.ability_params = ability_params or {}
 
     def execute(self) -> Dict:
         """Execute the card effect. Returns state changes."""
@@ -288,7 +289,7 @@ class CardEffect:
         for target in self.targets:
             perm = self.game.find_permanent(target)
             if perm:
-                perm._protected = True
+                perm._hexproof = True
                 changes.append({
                     'type': 'PROTECT',
                     'target': target
@@ -574,7 +575,7 @@ class CardEffect:
         for target in self.targets:
             perm = self.game.find_permanent(target)
             if perm and perm.controller == self.controller:
-                perm._protected = True
+                perm._temporary_protection_color = self.ability_params.get('chosen_color')
                 changes.append({'type': 'PROTECT', 'target': target})
         return {'state_changes': changes}
 
@@ -586,7 +587,7 @@ class CardEffect:
         return {'state_changes': [{'type': 'REGENERATION_SHIELD', 'target': perm.id}]}
 
 
-def execute_card_effect(game, card_id: str, controller: str, targets: List[str] = None, ability: str = None, kicked: bool = False) -> Dict:
+def execute_card_effect(game, card_id: str, controller: str, targets: List[str] = None, ability: str = None, kicked: bool = False, ability_params: Dict = None) -> Dict:
     """Execute a card effect."""
-    effect = CardEffect(game, card_id, controller, targets, ability=ability, kicked=kicked)
+    effect = CardEffect(game, card_id, controller, targets, ability=ability, kicked=kicked, ability_params=ability_params)
     return effect.execute()

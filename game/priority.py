@@ -187,7 +187,7 @@ class PriorityManager:
 
         if item.item_type == "ABILITY":
             from game.card_effects import execute_card_effect
-            result = execute_card_effect(self.game, item.card_id, item.controller, item.targets, ability=item.ability, kicked=item.kicked)
+            result = execute_card_effect(self.game, item.card_id, item.controller, item.targets, ability=item.ability, kicked=item.kicked, ability_params=item.ability_params)
             if result.get('error'):
                 self.game.log(f"Effect error: {result['error']}")
             if result.get('state_changes'):
