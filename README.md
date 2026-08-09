@@ -144,3 +144,30 @@ python launcher.py --list-cards
 - **Game Phases**: 14 phases/steps
 - **Error Codes**: 11 defined
 - **PDU Types**: 26 defined
+
+## Work Distribution Matrix
+
+| Task / Feature | Member 1 | Member 2 | Member 3 | Member 4 |
+|---|---|---|---|---|
+| TCP Server: connection handling, framing, dispatch | | | | |
+| Game lifecycle: LOBBY, GAME_SETUP, MULLIGAN logic | | | | |
+| Turn & phase engine (all phases/steps, transitions) | | | | |
+| Priority & Stack logic, spell/ability resolution | | | | |
+| Combat system (attackers, blockers, damage) | | | | |
+| Client implementation & state rendering | | | | |
+| PDU serialisation/deserialisation (all 25 PDU types) | | | | |
+| Error handling, PING/PONG heartbeat, disconnect logic | | | | |
+| Verbose mode (client + server PDU logging, toggle on/off) | | | | |
+| Testing & interoperability | | | | |
+| README / documentation / AI disclosure | | | | |
+
+## AI Usage
+*(Describe all AI tools used such as ChatGPT, GitHub Copilot, Claude, etc., and detail how they were used to assist in this machine problem).*
+
+## Known Limitations / Deviations from RFC
+While the MTGNP 1.0 protocol is fully compliant, a few keyword abilities present on catalog cards are **not required by the RFC** and are therefore omitted from the base game logic:
+- **Flying / Evasion**: Any creature can currently block a flyer.
+- **Vigilance**: Attacking still taps the creature.
+- **Hexproof / Protection**: The `_protected` flag is set by certain card effects but never verified in target validation.
+- **Kicker / Madness / Suspend**: Tagged on some cards but there are no PDU fields or code paths to invoke them.
+- **Trample**: Intentionally absent, as the RFC (Section 1) explicitly excludes it from MTGNP 1.0.

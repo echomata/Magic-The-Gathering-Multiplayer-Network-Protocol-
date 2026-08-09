@@ -641,6 +641,18 @@ class ActionHandler:
             if target_perm is not perm:
                 self.game.send_error(conn, "ILLEGAL_TARGET", "Regenerate must target its source", pdu)
                 return
+                
+        if targets:
+            target_perm = self.game.find_permanent(targets[0])
+            if target_perm and target_perm.controller != player_id:
+                if target_perm.has_hexproof():
+                    self.game.send_error(conn, "ILLEGAL_TARGET", "Target has hexproof", pdu)
+                    return
+                source_color = perm.card_data.get('color', '') if perm.card_data else ''
+                if target_perm.has_protection_from(source_color):
+                    self.game.send_error(conn, "ILLEGAL_TARGET", "Target has protection from this source's color", pdu)
+                    return
+
         requires_tap = cost_payment.get('tap', False)
         
         if ability.startswith('mana_'):

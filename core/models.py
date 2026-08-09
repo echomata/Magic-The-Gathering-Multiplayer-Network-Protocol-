@@ -88,10 +88,15 @@ class Permanent:
         return card_has_flying(self.card_data)
 
     def has_protection_from(self, color: str) -> bool:
+        if not color:
+            return False
         return (
             f'protection_{color.lower()}' in self.card_data.get('abilities', [])
             or self._temporary_protection_color == color.upper()
         )
+
+    def has_hexproof(self) -> bool:
+        return self._hexproof or 'hexproof' in self.card_data.get('abilities', [])
 
     def get_power(self) -> int:
         """Get current power including modifiers."""

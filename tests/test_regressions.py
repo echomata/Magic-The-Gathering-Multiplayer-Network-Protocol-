@@ -218,5 +218,58 @@ class ProtocolRegressionTests(unittest.TestCase):
         )
 
 
+    def test_activated_ability_rejects_hexproof(self):
+        game = make_game()
+        troll = Permanent("troll_ascetic_001", "player_2", "troll", 1)
+        ping_source = Permanent("prodigal_sorcerer_001", "player_1", "ping_source", 2)
+        game.players["player_2"]["battlefield"] = [troll]
+        game.players["player_1"]["battlefield"] = [ping_source]
+        
+        class MockConn:
+            pass
+        conn = MockConn()
+        
+        action = ActionHandler(game)
+        action.handle_activate_ability(
+            conn,
+            {
+                "type": "ACTIVATE_ABILITY",
+                "seq_num": 1,
+                "source_id": ping_source.id,
+                "ability_index": 0,  # ping
+                "targets": [troll.id],
+                "cost_payment": {"tap": True, "mana": {}},
+            },
+        )
+        # Should be rejected, tap shouldn't happen
+        self.assertFalse(ping_source.tapped)
+
+    def test_activated_ability_rejects_protection(self):
+        game = make_game()
+        knight = Permanent("white_knight_001", "player_2", "knight", 1)  # Protection from black
+        ping_source = Permanent("cuombajj_witches_001", "player_1", "ping_source", 2) # Doesn't exist, let's just make it a black permanent
+        ping_source.card_data = {'color': 'B', 'abilities': ['ping']}
+        game.players["player_2"]["battlefield"] = [knight]
+        game.players["player_1"]["battlefield"] = [ping_source]
+        
+        class MockConn:
+            pass
+        conn = MockConn()
+        
+        action = ActionHandler(game)
+        action.handle_activate_ability(
+            conn,
+            {
+                "type": "ACTIVATE_ABILITY",
+                "seq_num": 1,
+                "source_id": ping_source.id,
+                "ability_index": 0,
+                "targets": [knight.id],
+                "cost_payment": {"tap": True, "mana": {}},
+            },
+        )
+        # Should be rejected
+        self.assertFalse(ping_source.tapped)
+
 if __name__ == "__main__":
     unittest.main()
