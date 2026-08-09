@@ -55,10 +55,23 @@ class LifecycleManager:
             return
 
         from game.card_catalog import is_legal_card
+        seen_cards = set()
         for card_id in deck_list:
             if not is_legal_card(card_id):
                 self.game.send_error(conn, "ILLEGAL_DECK", f"Unknown card: {card_id}", pdu)
                 return
+            if card_id in seen_cards:
+                self.game.send_error(conn, "ILLEGAL_DECK", f"Duplicate card instance in deck: {card_id}", pdu)
+                return
+            seen_cards.add(card_id)
+
+        for other_pid, other_data in self.game.players.items():
+            if other_pid != player_id:
+                opponent_deck = set(other_data.get('deck', []))
+                for card_id in deck_list:
+                    if card_id in opponent_deck:
+                        self.game.send_error(conn, "ILLEGAL_DECK", f"Card instance already claimed by opponent: {card_id}", pdu)
+                        return
 
         self.game.players[player_id] = {
             'conn': conn,
