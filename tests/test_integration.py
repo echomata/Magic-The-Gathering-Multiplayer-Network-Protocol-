@@ -241,12 +241,14 @@ class SocketIntegrationTests(unittest.TestCase):
                     "type": "PRIORITY_PASS",
                     "seq_num": game.priority_manager.priority_seq,
                 })
+                time.sleep(0.01)
             elif phase == "DECLARE_ATTACKERS" and game.priority_manager.priority_holder:
                 self.send(p1 if game.active_player == "player_1" else p2, {
                     "type": "DECLARE_ATTACKERS",
                     "seq_num": game.priority_manager.priority_seq,
                     "attackers": [],
                 })
+                time.sleep(0.01)
             elif phase == "DECLARE_BLOCKERS" and game.priority_manager.priority_holder:
                 nap = game.get_other_player(game.active_player)
                 self.send(p1 if nap == "player_1" else p2, {
@@ -254,6 +256,7 @@ class SocketIntegrationTests(unittest.TestCase):
                     "seq_num": game.priority_manager.priority_seq,
                     "blockers": [],
                 })
+                time.sleep(0.01)
             else:
                 time.sleep(0.005)
 

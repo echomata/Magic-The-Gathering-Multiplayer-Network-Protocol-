@@ -165,7 +165,7 @@ class ProtocolRegressionTests(unittest.TestCase):
             "Target has hexproof",
         )
 
-    def test_trample_single_blocker_assigns_power_once(self):
+    def test_no_trample_damage_to_player(self):
         from game.combat import CombatSystem
 
         game = make_game()
@@ -177,9 +177,9 @@ class ProtocolRegressionTests(unittest.TestCase):
         game.combat_system.blockers = [{"creature_id": "blocker", "blocking_id": "attacker"}]
         game.combat_system.deal_combat_damage()
         # Reckless Wurm is 4/4 and Grizzly Bears is 2/2: 2 to the blocker,
-        # 2 trample to the player, for 4 total.
+        # but MTGNP 1.0 does not implement trample, so no damage goes to the player.
         self.assertEqual(blocker.damage, 2)
-        self.assertEqual(game.players["player_2"]["life"], 18)
+        self.assertEqual(game.players["player_2"]["life"], 20)
 
     def test_regeneration_does_not_save_zero_toughness(self):
         game = make_game()

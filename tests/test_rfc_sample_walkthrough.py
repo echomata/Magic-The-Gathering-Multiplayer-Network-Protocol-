@@ -130,8 +130,6 @@ class RFCSampleWalkthroughTest(unittest.TestCase):
                             })
 
     def pass_priority_to_both(self, p1, p2):
-        # We assume p1 currently has priority, or whoever is active.
-        # Actually it's easier to just pass whenever a PRIORITY_GRANT comes, until the phase changes or stack resolves.
         pass
 
     def test_rfc_sample_walkthrough(self):
