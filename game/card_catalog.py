@@ -337,7 +337,7 @@ def can_play_during_phase(card: dict, phase: str) -> bool:
     if is_instant(card):
         return True  # Instants can be played anytime with priority
     
-    if is_sorcery(card) or is_enchantment(card) or card_type == 'Creature' or card_type == 'Artifact Creature':
+    if is_sorcery(card) or is_enchantment(card) or card_type in ['Creature', 'Artifact Creature', 'Artifact']:
         return phase in ["PRECOMBAT_MAIN", "POSTCOMBAT_MAIN"]
     
     return True  # Default to allowed

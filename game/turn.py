@@ -147,9 +147,15 @@ class TurnEngine:
         self.game.log("FIRST_STRIKE_DAMAGE step")
 
         has_first_strike = False
+        all_creatures = []
         for attack in self.game.combat_system.attackers:
-            perm = self.game.find_permanent(attack.get('creature_id'))
-            if perm and perm.has_first_strike():
+            all_creatures.append(attack.get('creature_id'))
+        for blocker in self.game.combat_system.blockers:
+            all_creatures.append(blocker.get('creature_id'))
+            
+        for creature_id in all_creatures:
+            perm = self.game.find_permanent(creature_id)
+            if perm and (perm.has_first_strike() or perm.has_double_strike()):
                 has_first_strike = True
                 break
 

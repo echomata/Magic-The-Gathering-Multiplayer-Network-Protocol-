@@ -78,14 +78,18 @@ class ActionHandler:
         if self.game.state != "IN_GAME" or self.game.phase != "CLEANUP":
             self.game.send_error(conn, "WRONG_PHASE", "Can only discard in Cleanup step", pdu)
             return
+        """Handle DISCARD PDU."""
+        if self.game.state != "IN_GAME" or self.game.phase != "CLEANUP":
+            self.game.send_error(conn, "WRONG_PHASE", "Can only discard in Cleanup step", pdu)
+            return
 
         player_id = self.game.get_player_by_conn(conn)
         if not player_id or player_id != self.waiting_for_discard:
             self.game.send_error(conn, "ILLEGAL_ACTION", "Not your turn to discard", pdu)
             return
 
-        if 'seq_num' not in pdu:
-            self.game.send_error(conn, "STALE_ACTION", "Missing seq_num", pdu)
+        if pdu.get('seq_num') != self.game.players[player_id].get('last_seq_num'):
+            self.game.send_error(conn, "STALE_ACTION", "Stale priority or missing seq_num", pdu)
             return
 
         card_ids = pdu.get('card_ids', [])
@@ -419,6 +423,10 @@ class ActionHandler:
 
             if target not in self.game.players:
                 self.game.send_error(conn, "ILLEGAL_TARGET", f"Invalid target: {target}", pdu)
+                return
+
+            if target == player_id:
+                self.game.send_error(conn, "ILLEGAL_TARGET", "Cannot attack yourself", pdu)
                 return
 
             if not perm.has_vigilance():

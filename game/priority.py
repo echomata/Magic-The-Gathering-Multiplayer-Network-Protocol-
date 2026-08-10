@@ -162,6 +162,7 @@ class PriorityManager:
                             perm._regeneration_shield -= 1
                             perm.damage = 0
                             perm.tapped = True
+                            self.game.combat_system.remove_from_combat(perm.id)
                             actions_taken = True
                             continue
                         if perm.get_toughness() <= 0 or perm.damage >= perm.get_toughness():

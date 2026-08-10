@@ -1,4 +1,5 @@
 import unittest
+import time
 
 from core.models import Permanent
 from game.actions import ActionHandler
@@ -14,6 +15,18 @@ class FakeServer:
 
     def send_error(self, conn, code, message, rejected_action=None):
         pass
+
+
+class CaptureServer(FakeServer):
+    def __init__(self):
+        self.sent = []
+        self.errors = []
+
+    def send_pdu(self, conn, pdu):
+        self.sent.append((conn, pdu))
+
+    def send_error(self, conn, code, message, rejected_action=None):
+        self.errors.append((conn, code, message, rejected_action))
 
 
 def make_game():
@@ -270,6 +283,250 @@ class ProtocolRegressionTests(unittest.TestCase):
         )
         # Should be rejected
         self.assertFalse(ping_source.tapped)
+
+    def test_setup_and_london_mulligan_reach_first_turn(self):
+        from game.lifecycle import LifecycleManager
+
+        server = CaptureServer()
+        game = Game(server)
+        conn1, conn2 = object(), object()
+        game.player_conns = [conn1, conn2]
+        lifecycle = LifecycleManager(game)
+        deck1 = [
+            "mountain_001", "mountain_002", "mountain_003", "mountain_004",
+            "lightning_bolt_001", "shock_001", "goblin_guide_001", "forest_001",
+        ]
+        deck2 = [
+            "island_001", "island_002", "island_003", "island_004",
+            "counterspell_001", "ponder_001", "savannah_lions_001", "plains_001",
+        ]
+        lifecycle.handle_player_ready(conn1, {
+            "type": "PLAYER_READY", "seq_num": 1,
+            "player_id": "player_1", "deck_list": deck1,
+        })
+        lifecycle.handle_player_ready(conn2, {
+            "type": "PLAYER_READY", "seq_num": 1,
+            "player_id": "player_2", "deck_list": deck2,
+        })
+
+        self.assertEqual(game.state, "MULLIGAN")
+        self.assertEqual(len(game.players["player_1"]["hand"]), 7)
+        self.assertEqual(len(game.players["player_2"]["hand"]), 7)
+
+        p1_seq = game.players["player_1"]["last_seq_num"]
+        p2_seq = game.players["player_2"]["last_seq_num"]
+        lifecycle.handle_mulligan_choice(conn1, {
+            "type": "MULLIGAN_CHOICE", "seq_num": p1_seq,
+            "keep": False, "cards_to_bottom": [],
+        })
+        self.assertEqual(game.players["player_1"]["mulligan_count"], 1)
+        self.assertEqual(len(game.players["player_1"]["hand"]), 7)
+
+        p1_keep_seq = game.players["player_1"]["last_seq_num"]
+        bottom_card = game.players["player_1"]["hand"][0]
+        lifecycle.handle_mulligan_choice(conn1, {
+            "type": "MULLIGAN_CHOICE", "seq_num": p1_keep_seq,
+            "keep": True, "cards_to_bottom": [bottom_card],
+        })
+        lifecycle.handle_mulligan_choice(conn2, {
+            "type": "MULLIGAN_CHOICE", "seq_num": p2_seq,
+            "keep": True, "cards_to_bottom": [],
+        })
+
+        self.assertEqual(game.state, "IN_GAME")
+        self.assertEqual(game.turn, 1)
+        game.priority_manager.reset()
+
+    def test_priority_passes_resolve_spell_and_broadcast_stack_result(self):
+        from game.priority import PriorityManager
+
+        server = CaptureServer()
+        game = make_game()
+        game.server = server
+        conn1, conn2 = object(), object()
+        game.players["player_1"]["conn"] = conn1
+        game.players["player_2"]["conn"] = conn2
+        game.player_conns = [conn1, conn2]
+        game.state = "IN_GAME"
+        game.phase = "PRECOMBAT_MAIN"
+        game.active_player = "player_1"
+        game.priority_manager.priority_holder = "player_1"
+        game.priority_manager.priority_seq = 10
+        game.players["player_1"]["hand"] = ["lightning_bolt_001"]
+        game.players["player_1"]["battlefield"] = [
+            Permanent("mountain_001", "player_1", "mountain_001", 0)
+        ]
+
+        ActionHandler(game).handle_cast_spell(conn1, {
+            "type": "CAST_SPELL", "seq_num": 10,
+            "card_id": "lightning_bolt_001", "targets": ["player_2"],
+            "mana_payment": {"R": 1},
+        })
+        self.assertEqual(len(game.stack), 1)
+        first_pass_seq = game.priority_manager.priority_seq
+        game.priority_manager.handle_priority_pass(conn1, {
+            "type": "PRIORITY_PASS", "seq_num": first_pass_seq,
+        })
+        second_pass_seq = game.priority_manager.priority_seq
+        game.priority_manager.handle_priority_pass(conn2, {
+            "type": "PRIORITY_PASS", "seq_num": second_pass_seq,
+        })
+
+        self.assertEqual(game.players["player_2"]["life"], 17)
+        self.assertEqual(game.stack, [])
+        self.assertTrue(any(pdu.get("type") == "STACK_RESOLVE" for _, pdu in server.sent))
+        game.priority_manager.reset()
+
+    def test_empty_library_draw_causes_deck_empty_game_over(self):
+        server = CaptureServer()
+        game = make_game()
+        game.server = server
+        conn1, conn2 = object(), object()
+        game.players["player_1"]["conn"] = conn1
+        game.players["player_2"]["conn"] = conn2
+        game.player_conns = [conn1, conn2]
+        game.state = "IN_GAME"
+        game.phase = "PRECOMBAT_MAIN"
+        game.active_player = "player_1"
+
+        execute_card_effect(game, "merfolk_looter_001", "player_1", ability="loot")
+        game.priority_manager.check_state_based_actions()
+
+        self.assertEqual(game.state, "LOBBY")
+        game_over = [pdu for _, pdu in server.sent if pdu.get("type") == "GAME_OVER"][-1]
+        self.assertEqual(game_over["reason"], "DECK_EMPTY")
+        self.assertEqual(game_over["winner_id"], "player_2")
+
+    def test_mana_expires_before_next_step_handler(self):
+        game = make_game()
+        game.phase = "UPKEEP"
+        game.floating_mana = {"player_1": {"R": 1}}
+        observed = []
+        game.turn_engine.do_draw_step = lambda: observed.append(game.floating_mana.copy())
+
+        game.turn_engine.advance_step()
+
+        self.assertEqual(observed, [{}])
+
+    def test_invalid_attacker_declaration_is_atomic(self):
+        game = make_game()
+        game.state = "IN_GAME"
+        game.phase = "DECLARE_ATTACKERS"
+        game.active_player = "player_1"
+        game.priority_manager.priority_holder = "player_1"
+        game.priority_manager.priority_seq = 4
+        creature = Permanent("savannah_lions_001", "player_1", "attacker", 0)
+        game.players["player_1"]["battlefield"] = [creature]
+        game.combat_system.attackers = [{"creature_id": "old", "target": "player_2"}]
+
+        ActionHandler(game).handle_declare_attackers(None, {
+            "type": "DECLARE_ATTACKERS", "seq_num": 4,
+            "attackers": [
+                {"creature_id": "attacker", "target": "player_2"},
+                {"creature_id": "missing", "target": "player_2"},
+            ],
+        })
+
+        self.assertEqual(game.combat_system.attackers, [{"creature_id": "old", "target": "player_2"}])
+        self.assertFalse(creature.tapped)
+
+    def test_reconnect_reuses_player_and_sends_state(self):
+        from game.lifecycle import LifecycleManager
+
+        server = CaptureServer()
+        game = make_game()
+        game.server = server
+        old_conn, other_conn, new_conn = object(), object(), object()
+        game.players["player_1"]["conn"] = None
+        game.players["player_2"]["conn"] = other_conn
+        game.player_conns = [other_conn]
+        game.state = "IN_GAME"
+        game.phase = "PRECOMBAT_MAIN"
+        LifecycleManager(game).handle_player_ready(new_conn, {
+            "type": "PLAYER_READY", "seq_num": 1,
+            "player_id": "player_1",
+        })
+
+        self.assertIs(game.players["player_1"]["conn"], new_conn)
+        self.assertIn(new_conn, game.player_conns)
+        self.assertTrue(any(pdu.get("type") == "GAME_STATE_UPDATE" for _, pdu in server.sent))
+
+    def test_life_zero_game_over_has_correct_reason_and_winner(self):
+        server = CaptureServer()
+        game = make_game()
+        game.server = server
+        conn1, conn2 = object(), object()
+        game.players["player_1"]["conn"] = conn1
+        game.players["player_2"]["conn"] = conn2
+        game.player_conns = [conn1, conn2]
+        game.state = "IN_GAME"
+        game.active_player = "player_1"
+        game.players["player_1"]["life"] = 0
+
+        game.priority_manager.check_state_based_actions()
+
+        game_over = [pdu for _, pdu in server.sent if pdu.get("type") == "GAME_OVER"][-1]
+        self.assertEqual(game_over["reason"], "LIFE_ZERO")
+        self.assertEqual(game_over["winner_id"], "player_2")
+        self.assertEqual(game.state, "LOBBY")
+
+    def test_reconnect_timeout_produces_disconnect_game_over(self):
+        import game.lifecycle as lifecycle_module
+
+        server = CaptureServer()
+        game = make_game()
+        game.server = server
+        conn1, conn2 = object(), object()
+        game.players["player_1"]["conn"] = conn1
+        game.players["player_2"]["conn"] = conn2
+        game.player_conns = [conn2]
+        game.state = "IN_GAME"
+        old_timeout = lifecycle_module.RECONNECT_TIMEOUT
+        lifecycle_module.RECONNECT_TIMEOUT = 0.01
+        try:
+            game.lifecycle_manager.handle_disconnect("player_1")
+            deadline = time.time() + 1
+            while game.state != "LOBBY" and time.time() < deadline:
+                time.sleep(0.01)
+        finally:
+            lifecycle_module.RECONNECT_TIMEOUT = old_timeout
+
+        game_over = [pdu for _, pdu in server.sent if pdu.get("type") == "GAME_OVER"][-1]
+        self.assertEqual(game_over["reason"], "DISCONNECT")
+        self.assertEqual(game_over["winner_id"], "player_2")
+
+    def test_client_pong_correlation_ignores_wrong_sequence(self):
+        from network.client import MTGNPClient
+
+        client = MTGNPClient()
+        client._pending_ping_seq = 8
+        client._handle_pdu({"type": "PONG", "seq_num": 7, "timestamp": 1})
+        self.assertEqual(client._pending_ping_seq, 8)
+        client._handle_pdu({"type": "PONG", "seq_num": 8, "timestamp": 2})
+        self.assertIsNone(client._pending_ping_seq)
+
+    def test_client_disconnects_after_pong_timeout(self):
+        from network.client import MTGNPClient
+        from core.constants import PONG_TIMEOUT
+
+        class DummySocket:
+            def __init__(self):
+                self.closed = False
+
+            def close(self):
+                self.closed = True
+
+        client = MTGNPClient()
+        client.socket = DummySocket()
+        client._pending_ping_seq = 1
+        client.last_pong_time = time.time() - PONG_TIMEOUT - 1
+        client._start_ping()
+        deadline = time.time() + 2
+        while client.running and time.time() < deadline:
+            time.sleep(0.01)
+
+        self.assertFalse(client.running)
+        self.assertTrue(client.socket.closed)
 
 if __name__ == "__main__":
     unittest.main()

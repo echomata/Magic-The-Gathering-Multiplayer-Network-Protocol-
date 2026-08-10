@@ -78,6 +78,12 @@ class MTGNPServer:
 
         except KeyboardInterrupt:
             print("\nShutting down...")
+        except OSError as exc:
+            # Closing the listening socket from shutdown() interrupts a
+            # blocked accept() call. Treat that expected condition as a
+            # normal shutdown rather than leaking a thread traceback.
+            if self.running:
+                self.log(f"Accept loop error: {exc}")
         finally:
             self.shutdown()
 
@@ -166,6 +172,11 @@ class MTGNPServer:
         player_id = self.game.get_player_by_conn(conn)
         if not player_id:
             self.send_error(conn, "ILLEGAL_ACTION", "Unknown player", pdu)
+            return
+
+        expected_seq = self.game.players[player_id].get('last_seq_num')
+        if pdu.get('seq_num') != expected_seq:
+            self.send_error(conn, "STALE_ACTION", "Stale sequence number", pdu)
             return
 
         winner_id = self.game.get_other_player(player_id)

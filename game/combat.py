@@ -1,4 +1,5 @@
 """Combat system."""
+"""Combat system."""
 from typing import Dict, List
 
 
@@ -11,6 +12,17 @@ class CombatSystem:
         self.blockers = []
         self.damage_order = {}
         self.first_strike_done = False
+
+    def remove_from_combat(self, perm_id: str):
+        """Remove a permanent from combat (e.g., when regenerated)."""
+        self.attackers = [a for a in self.attackers if a.get('creature_id') != perm_id]
+        self.blockers = [b for b in self.blockers if b.get('creature_id') != perm_id and b.get('blocking_id') != perm_id]
+        
+        if perm_id in self.damage_order:
+            del self.damage_order[perm_id]
+        for aid, order in self.damage_order.items():
+            if perm_id in order:
+                order.remove(perm_id)
 
     @staticmethod
     def _deals_damage_in_pass(perm, first_strike_only: bool) -> bool:
@@ -39,7 +51,6 @@ class CombatSystem:
     def deal_combat_damage(self, first_strike_only: bool = False):
         """Deal combat damage."""
         damage_events = []
-        creatures_died = []
 
         for attack in self.attackers:
             creature_id = attack.get('creature_id')
@@ -68,8 +79,6 @@ class CombatSystem:
                             damage_to_deal = min(remaining_power, blocker_perm.get_toughness())
                             if not self._damage_is_prevented(perm, blocker_perm):
                                 blocker_perm.damage += damage_to_deal
-                                if blocker_perm.damage >= blocker_perm.get_toughness():
-                                    creatures_died.append(block_id)
                                 damage_events.append({
                                     "source": creature_id,
                                     "target": block_id,
@@ -90,8 +99,6 @@ class CombatSystem:
                             assigned_to_blocker = power - trample_damage
                             if not self._damage_is_prevented(perm, blocker_perm):
                                 blocker_perm.damage += assigned_to_blocker
-                                if blocker_perm.damage >= blocker_perm.get_toughness():
-                                    creatures_died.append(block.get('creature_id'))
                                 damage_events.append({
                                     "source": creature_id,
                                     "target": block.get('creature_id'),
@@ -128,23 +135,17 @@ class CombatSystem:
             if attacker_perm:
                 if not self._damage_is_prevented(perm, attacker_perm):
                     attacker_perm.damage += power
-                    if attacker_perm.damage >= attacker_perm.get_toughness():
-                        creatures_died.append(blocking_id)
                     damage_events.append({
                         "source": creature_id,
                         "target": blocking_id,
                         "amount": power
                     })
 
-        for creature_id in set(creatures_died):
-            self.game.remove_permanent(creature_id)
-
         pdu = {
             "type": "COMBAT_DAMAGE_RESULT",
             "seq_num": self.game.next_seq(),
             "damage_events": damage_events,
-            "life_totals": {pid: data.get('life', 20) for pid, data in self.game.players.items()},
-            "creatures_died": list(set(creatures_died))
+            "life_totals": {pid: data.get('life', 20) for pid, data in self.game.players.items()}
         }
         self.game.broadcast(pdu)
 
