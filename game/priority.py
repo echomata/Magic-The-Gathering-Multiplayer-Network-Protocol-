@@ -158,7 +158,7 @@ class PriorityManager:
                     from game.card_catalog import is_creature, get_card
                     card = get_card(perm.card_id)
                     if card and is_creature(card):
-                        if (perm.get_toughness() > 0 and perm.damage >= perm.get_toughness()) and perm._regeneration_shield:
+                        if (perm.get_toughness() > 0 and perm.damage >= perm.get_toughness()) and perm._regeneration_shield and not perm._cannot_regenerate_this_turn:
                             perm._regeneration_shield -= 1
                             perm.damage = 0
                             perm.tapped = True

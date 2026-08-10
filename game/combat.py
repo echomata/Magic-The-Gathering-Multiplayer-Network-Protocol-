@@ -78,12 +78,16 @@ class CombatSystem:
                         if blocker_perm:
                             damage_to_deal = min(remaining_power, blocker_perm.get_toughness())
                             if not self._damage_is_prevented(perm, blocker_perm):
-                                blocker_perm.damage += damage_to_deal
-                                damage_events.append({
-                                    "source": creature_id,
-                                    "target": block_id,
-                                    "amount": damage_to_deal
-                                })
+                                prevented = min(damage_to_deal, getattr(blocker_perm, '_prevent_next_damage', 0))
+                                blocker_perm._prevent_next_damage = max(0, getattr(blocker_perm, '_prevent_next_damage', 0) - damage_to_deal)
+                                damage_to_deal -= prevented
+                                if damage_to_deal > 0:
+                                    blocker_perm.damage += damage_to_deal
+                                    damage_events.append({
+                                        "source": creature_id,
+                                        "target": block_id,
+                                        "amount": damage_to_deal
+                                    })
                             remaining_power -= damage_to_deal
                     if perm.card_data and 'trample' in perm.card_data.get('abilities', []):
                         trample_damage = max(remaining_power, 0)
@@ -98,26 +102,40 @@ class CombatSystem:
                             ) else 0
                             assigned_to_blocker = power - trample_damage
                             if not self._damage_is_prevented(perm, blocker_perm):
-                                blocker_perm.damage += assigned_to_blocker
-                                damage_events.append({
-                                    "source": creature_id,
-                                    "target": block.get('creature_id'),
-                                    "amount": assigned_to_blocker
-                                })
+                                prevented = min(assigned_to_blocker, getattr(blocker_perm, '_prevent_next_damage', 0))
+                                blocker_perm._prevent_next_damage = max(0, getattr(blocker_perm, '_prevent_next_damage', 0) - assigned_to_blocker)
+                                assigned_to_blocker -= prevented
+                                if assigned_to_blocker > 0:
+                                    blocker_perm.damage += assigned_to_blocker
+                                    damage_events.append({
+                                        "source": creature_id,
+                                        "target": block.get('creature_id'),
+                                        "amount": assigned_to_blocker
+                                    })
                 if trample_damage and target in self.game.players:
-                    self.game.players[target]['life'] -= trample_damage
+                    player = self.game.players[target]
+                    prevented = min(trample_damage, player.get('_prevent_next_damage', 0))
+                    player['_prevent_next_damage'] = max(0, player.get('_prevent_next_damage', 0) - trample_damage)
+                    trample_damage -= prevented
+                    if trample_damage > 0:
+                        player['life'] -= trample_damage
+                        damage_events.append({
+                            "source": creature_id,
+                            "target": target,
+                            "amount": trample_damage
+                        })
+            else:
+                player = self.game.players[target]
+                prevented = min(power, player.get('_prevent_next_damage', 0))
+                player['_prevent_next_damage'] = max(0, player.get('_prevent_next_damage', 0) - power)
+                power -= prevented
+                if power > 0:
+                    player['life'] -= power
                     damage_events.append({
                         "source": creature_id,
                         "target": target,
-                        "amount": trample_damage
+                        "amount": power
                     })
-            else:
-                self.game.players[target]['life'] -= power
-                damage_events.append({
-                    "source": creature_id,
-                    "target": target,
-                    "amount": power
-                })
 
         for block in self.blockers:
             creature_id = block.get('creature_id')
@@ -134,12 +152,16 @@ class CombatSystem:
             attacker_perm = self.game.find_permanent(blocking_id)
             if attacker_perm:
                 if not self._damage_is_prevented(perm, attacker_perm):
-                    attacker_perm.damage += power
-                    damage_events.append({
-                        "source": creature_id,
-                        "target": blocking_id,
-                        "amount": power
-                    })
+                    prevented = min(power, getattr(attacker_perm, '_prevent_next_damage', 0))
+                    attacker_perm._prevent_next_damage = max(0, getattr(attacker_perm, '_prevent_next_damage', 0) - power)
+                    power -= prevented
+                    if power > 0:
+                        attacker_perm.damage += power
+                        damage_events.append({
+                            "source": creature_id,
+                            "target": blocking_id,
+                            "amount": power
+                        })
 
         pdu = {
             "type": "COMBAT_DAMAGE_RESULT",

@@ -231,11 +231,15 @@ class TurnEngine:
             return
 
         for pid, pdata in self.game.players.items():
+            pdata['_cannot_gain_life'] = False
+            pdata['_prevent_next_damage'] = 0
             for perm in pdata.get('battlefield', []):
                 perm.damage = 0
                 perm._temporary_bonus = {'power': 0, 'toughness': 0}
                 perm.temporary_abilities.clear()
                 perm._regeneration_shield = 0
+                perm._cannot_regenerate_this_turn = False
+                perm._prevent_next_damage = 0
 
         self.game.broadcast_game_state()
         self.end_turn()

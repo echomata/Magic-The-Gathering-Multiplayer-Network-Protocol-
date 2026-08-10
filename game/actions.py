@@ -175,10 +175,10 @@ class ActionHandler:
             return "This spell can only target a player"
         if creature_only and (not perm or not is_creature(target_card)):
             return "This spell must target a creature"
-        if perm and perm.controller != player_id:
-            if getattr(perm, '_hexproof', False) or 'hexproof' in perm.card_data.get('abilities', []):
+        if perm and (getattr(perm, '_hexproof', False) or 'hexproof' in perm.card_data.get('abilities', [])):
+            if perm.controller != player_id:
                 return "Target has hexproof"
-        if perm and perm.has_protection_from(card.get('color', '')) and perm.controller != player_id:
+        if perm and perm.has_protection_from(card.get('color', '')):
             return "Target has protection from this spell's color"
         if artifact_or_enchantment and (not perm or not (is_artifact(target_card) or is_enchantment(target_card))):
             return "This spell must target an artifact or enchantment"
@@ -688,8 +688,8 @@ class ActionHandler:
                 
         if targets:
             target_perm = self.game.find_permanent(targets[0])
-            if target_perm and target_perm.controller != player_id:
-                if target_perm.has_hexproof():
+            if target_perm:
+                if target_perm.controller != player_id and target_perm.has_hexproof():
                     self.game.send_error(conn, "ILLEGAL_TARGET", "Target has hexproof", pdu)
                     return
                 source_color = perm.card_data.get('color', '') if perm.card_data else ''
