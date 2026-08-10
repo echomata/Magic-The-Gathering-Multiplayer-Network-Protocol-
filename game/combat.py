@@ -1,5 +1,4 @@
 """Combat system."""
-"""Combat system."""
 from typing import Dict, List
 
 
@@ -89,8 +88,6 @@ class CombatSystem:
                                         "amount": damage_to_deal
                                     })
                             remaining_power -= damage_to_deal
-                    if perm.card_data and 'trample' in perm.card_data.get('abilities', []):
-                        trample_damage = max(remaining_power, 0)
                 else:
                     for block in blockers:
                         blocker_perm = self.game.find_permanent(block.get('creature_id'))
@@ -112,18 +109,6 @@ class CombatSystem:
                                         "target": block.get('creature_id'),
                                         "amount": assigned_to_blocker
                                     })
-                if trample_damage and target in self.game.players:
-                    player = self.game.players[target]
-                    prevented = min(trample_damage, player.get('_prevent_next_damage', 0))
-                    player['_prevent_next_damage'] = max(0, player.get('_prevent_next_damage', 0) - trample_damage)
-                    trample_damage -= prevented
-                    if trample_damage > 0:
-                        player['life'] -= trample_damage
-                        damage_events.append({
-                            "source": creature_id,
-                            "target": target,
-                            "amount": trample_damage
-                        })
             else:
                 player = self.game.players[target]
                 prevented = min(power, player.get('_prevent_next_damage', 0))
