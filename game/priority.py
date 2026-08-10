@@ -136,6 +136,20 @@ class PriorityManager:
                         self.game.get_other_player(dead_players[0]), "LIFE_ZERO"
                     )
                 return
+
+            # Drawing from an empty library is a game-loss condition. Card
+            # effects mark the attempted draw during resolution, then this
+            # SBA pass applies the authoritative GAME_OVER result.
+            empty_draw_players = [
+                pid for pid, data in self.game.players.items()
+                if data.get('empty_draw_attempted', False)
+            ]
+            if empty_draw_players:
+                loser = empty_draw_players[0]
+                self.game.lifecycle_manager.end_game(
+                    self.game.get_other_player(loser), "DECK_EMPTY"
+                )
+                return
             
             # 2. Creatures with toughness <= 0 or damage >= toughness die
             creatures_to_destroy = []

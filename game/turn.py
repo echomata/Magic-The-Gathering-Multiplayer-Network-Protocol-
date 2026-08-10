@@ -251,6 +251,11 @@ class TurnEngine:
         """Advance to the next step/phase."""
         self.game.log(f"Advancing from {self.game.phase}")
 
+        # Mana remaining in the pool expires when the current step/phase
+        # ends. Mana is otherwise represented as an implementation detail
+        # because MTGNP clients declare complete payments in their PDUs.
+        self.game.floating_mana = {}
+
         step_handlers = {
             "UPKEEP": self.do_draw_step,
             "DRAW": self.do_precombat_main,

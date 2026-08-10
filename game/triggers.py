@@ -211,6 +211,8 @@ class TriggerManager:
         
         player_id = self.game.get_player_by_conn(conn)
         if player_id != self.waiting_for_order['player']:
+            self.game.send_error(conn, 'TRIGGER_ORDER_INVALID',
+                                 'This player does not control the pending triggers', pdu)
             return
             
         if pdu.get('seq_num') != self.waiting_for_order['seq_num']:
@@ -302,6 +304,8 @@ class TriggerManager:
         
         player_id = self.game.get_player_by_conn(conn)
         if player_id != self.waiting_for_choice['player']:
+            self.game.send_error(conn, 'TRIGGER_CHOICE_INVALID',
+                                 'This player does not control the pending trigger', pdu)
             return
             
         if pdu.get('seq_num') != self.waiting_for_choice['seq_num']:

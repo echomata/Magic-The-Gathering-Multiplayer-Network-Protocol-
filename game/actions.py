@@ -388,8 +388,19 @@ class ActionHandler:
             self.game.send_error(conn, "STALE_ACTION", "Stale priority", pdu)
             return
 
-        self.game.combat_system.attackers = []
-        for attack in pdu.get('attackers', []):
+        attackers = pdu.get('attackers', [])
+        if not isinstance(attackers, list):
+            self.game.send_error(conn, "ILLEGAL_ACTION", "attackers must be an array", pdu)
+            return
+
+        # Validate everything first. Illegal actions must leave combat state
+        # and tapped states unchanged.
+        new_attackers = []
+        attackers_to_tap = []
+        for attack in attackers:
+            if not isinstance(attack, dict):
+                self.game.send_error(conn, "ILLEGAL_ACTION", "Each attacker must be an object", pdu)
+                return
             creature_id = attack.get('creature_id')
             target = attack.get('target')
 
@@ -398,7 +409,7 @@ class ActionHandler:
                 self.game.send_error(conn, "ILLEGAL_ACTION", f"Invalid creature: {creature_id}", pdu)
                 return
 
-            if any(a.get('creature_id') == creature_id for a in self.game.combat_system.attackers):
+            if any(a.get('creature_id') == creature_id for a in new_attackers):
                 self.game.send_error(conn, "ILLEGAL_ACTION", "Creature declared more than once", pdu)
                 return
 
@@ -411,8 +422,12 @@ class ActionHandler:
                 return
 
             if not perm.has_vigilance():
-                perm.tapped = True
-            self.game.combat_system.attackers.append({"creature_id": creature_id, "target": target})
+                attackers_to_tap.append(perm)
+            new_attackers.append({"creature_id": creature_id, "target": target})
+
+        self.game.combat_system.attackers = new_attackers
+        for perm in attackers_to_tap:
+            perm.tapped = True
 
         self.game.log(f"Player {player_id} declared {len(self.game.combat_system.attackers)} attackers")
         self.game.broadcast_game_state()
@@ -445,9 +460,19 @@ class ActionHandler:
             self.game.send_error(conn, "STALE_ACTION", "Stale priority", pdu)
             return
 
-        self.game.combat_system.blockers = []
+        blockers = pdu.get('blockers', [])
+        if not isinstance(blockers, list):
+            self.game.send_error(conn, "ILLEGAL_ACTION", "blockers must be an array", pdu)
+            return
+
+        # Validate the complete declaration before replacing the current
+        # combat assignment.
+        new_blockers = []
         used_blockers = set()
-        for block in pdu.get('blockers', []):
+        for block in blockers:
+            if not isinstance(block, dict):
+                self.game.send_error(conn, "ILLEGAL_ACTION", "Each blocker must be an object", pdu)
+                return
             creature_id = block.get('creature_id')
             blocking_id = block.get('blocking_id')
 
@@ -477,7 +502,9 @@ class ActionHandler:
                 self.game.send_error(conn, "ILLEGAL_ACTION", f"Attacker {blocking_id} not found", pdu)
                 return
 
-            self.game.combat_system.blockers.append({"creature_id": creature_id, "blocking_id": blocking_id})
+            new_blockers.append({"creature_id": creature_id, "blocking_id": blocking_id})
+
+        self.game.combat_system.blockers = new_blockers
 
         self.game.log(f"Player {player_id} declared {len(self.game.combat_system.blockers)} blockers")
         self.game.broadcast_game_state()
@@ -501,8 +528,13 @@ class ActionHandler:
         attacker_id = pdu.get('attacker_id')
         blocker_order = pdu.get('blocker_order', [])
 
+        if not isinstance(blocker_order, list):
+            self.game.send_error(conn, "ILLEGAL_ACTION", "blocker_order must be an array", pdu)
+            return
+
         attacker = self.game.find_permanent(attacker_id)
-        if not attacker:
+        if not attacker or not any(a.get('creature_id') == attacker_id
+                                   for a in self.game.combat_system.attackers):
             self.game.send_error(conn, "ILLEGAL_ACTION", f"Unknown attacker: {attacker_id}", pdu)
             return
 
@@ -511,8 +543,12 @@ class ActionHandler:
             self.game.send_error(conn, "ILLEGAL_ACTION", "Not a multi-blocked attacker", pdu)
             return
 
+        expected_ids = [b.get('creature_id') for b in blockers]
+        if len(blocker_order) != len(expected_ids) or len(set(blocker_order)) != len(blocker_order):
+            self.game.send_error(conn, "ILLEGAL_ACTION", "Each blocker must appear exactly once", pdu)
+            return
         for block_id in blocker_order:
-            if not any(b.get('creature_id') == block_id for b in blockers):
+            if block_id not in expected_ids:
                 self.game.send_error(conn, "ILLEGAL_ACTION", f"Invalid blocker: {block_id}", pdu)
                 return
 

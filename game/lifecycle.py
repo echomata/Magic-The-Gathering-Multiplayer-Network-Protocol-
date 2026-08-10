@@ -84,7 +84,8 @@ class LifecycleManager:
             'life': INITIAL_LIFE,
             'ready': True,
             'ready_to_play': False,
-            'mulligan_count': 0
+            'mulligan_count': 0,
+            'empty_draw_attempted': False
         }
 
         if conn not in self.game.player_conns:
@@ -126,6 +127,7 @@ class LifecycleManager:
             data['graveyard'] = []
             data['mulligan_count'] = 0
             data['ready_to_play'] = False
+            data['empty_draw_attempted'] = False
 
         self.game.active_player = random.choice(list(self.game.players.keys()))
         self.game.log(f"Coin flip: {self.game.active_player} goes first")
@@ -160,6 +162,9 @@ class LifecycleManager:
         if not isinstance(keep, bool):
             self.game.send_error(conn, "ILLEGAL_ACTION", "keep must be boolean", pdu)
             return
+        if not isinstance(cards_to_bottom, list):
+            self.game.send_error(conn, "ILLEGAL_ACTION", "cards_to_bottom must be an array", pdu)
+            return
 
         data = self.game.players[player_id]
         mulligan_count = data.get('mulligan_count', 0)
@@ -171,13 +176,19 @@ class LifecycleManager:
                 return
 
             hand = data['hand']
+            # Validate the complete choice before changing either zone.
+            remaining_hand = hand[:]
             for card_id in cards_to_bottom:
-                if card_id not in hand:
+                if card_id not in remaining_hand:
                     self.game.send_error(conn, "ILLEGAL_ACTION",
                                        f"Card {card_id} not in hand", pdu)
                     return
+                remaining_hand.remove(card_id)
+
+            for card_id in cards_to_bottom:
                 hand.remove(card_id)
-                data['library'].append(card_id)
+            # library.pop() draws from the end, so index 0 is the bottom.
+            data['library'][0:0] = cards_to_bottom
 
             data['ready_to_play'] = True
             self.game.log(f"Player {player_id} kept hand after {mulligan_count} mulligans")

@@ -36,6 +36,8 @@ class MTGNPServer:
             echoed_seq = self.game.next_seq()
         pdu = {
             "type": "ERROR",
+            # The RFC ERROR schema echoes the rejected action's seq_num when
+            # one is available.
             "seq_num": echoed_seq,
             "code": code,
             "message": message
@@ -60,11 +62,15 @@ class MTGNPServer:
                 conn, addr = self.socket.accept()
                 self.log(f"New connection from {addr}")
 
+                # MTGNP 1.0 is a two-player protocol. Additional TCP
+                # connection attempts must be refused, rather than being
+                # seated as players or silently upgraded to spectators.
+                if len(self.connections) >= 2:
+                    self.log(f"Refusing additional connection from {addr}")
+                    conn.close()
+                    continue
+
                 self.connections.add(conn)
-                if len(self.connections) > 2:
-                    self.spectator_conns.add(conn)
-                    self.game.spectator_conns.add(conn)
-                    self.log("Accepted spectator connection")
 
                 thread = threading.Thread(target=self._handle_client, args=(conn, addr))
                 thread.daemon = True

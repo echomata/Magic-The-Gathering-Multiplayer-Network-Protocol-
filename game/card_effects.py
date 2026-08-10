@@ -19,6 +19,18 @@ class CardEffect:
         self.kicked = kicked
         self.ability_params = ability_params or {}
 
+    def _draw_card(self, player_id: str, changes: List[Dict]) -> Optional[str]:
+        """Draw one card and record an empty-library loss condition."""
+        player = self.game.get_player_data(player_id)
+        if not player.get('library'):
+            player['empty_draw_attempted'] = True
+            return None
+
+        drawn = player['library'].pop()
+        player['hand'].append(drawn)
+        changes.append({'type': 'DRAW', 'player': player_id, 'card': drawn})
+        return drawn
+
     def execute(self) -> Dict:
         """Execute the card effect. Returns state changes."""
         if not self.card:
@@ -215,15 +227,9 @@ class CardEffect:
             'top_cards': top_cards
         })
         
-        # In simplified version, just draw one
-        if library:
-            drawn = library.pop()
-            player['hand'].append(drawn)
-            changes.append({
-                'type': 'DRAW',
-                'player': self.controller,
-                'card': drawn
-            })
+        # In simplified version, just draw one. An attempted draw from an
+        # empty library is still a loss condition.
+        self._draw_card(self.controller, changes)
         return {'state_changes': changes}
 
     def _handle_giant_growth(self) -> Dict:
@@ -536,10 +542,7 @@ class CardEffect:
     def _handle_loot(self) -> Dict:
         player = self.game.get_player_data(self.controller)
         changes = []
-        if player['library']:
-            drawn = player['library'].pop()
-            player['hand'].append(drawn)
-            changes.append({'type': 'DRAW', 'player': self.controller, 'card': drawn})
+        self._draw_card(self.controller, changes)
         if player['hand']:
             discarded = player['hand'].pop()
             player['graveyard'].append(discarded)
