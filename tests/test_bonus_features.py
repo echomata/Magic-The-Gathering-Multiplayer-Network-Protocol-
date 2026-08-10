@@ -97,5 +97,31 @@ class BonusFeaturesTests(unittest.TestCase):
         self.assertEqual(bear.damage, 0)
         self.assertEqual(bear._prevent_next_damage, 0)
 
+    def test_doom_blade_allows_regeneration(self):
+        game = make_game()
+        troll = Permanent("troll_ascetic_001", "player_2", "troll", 1)
+        troll._regeneration_shield = 1
+        game.players["player_2"]["battlefield"].append(troll)
+        
+        # Doom Blade destroys target nonblack creature
+        execute_card_effect(game, "doom_blade_001", "player_1", ["troll"])
+        
+        # Troll should survive because of the shield
+        self.assertIn(troll, game.players["player_2"]["battlefield"])
+        self.assertEqual(troll._regeneration_shield, 0)
+        self.assertTrue(troll.tapped)
+
+    def test_terror_prevents_regeneration(self):
+        game = make_game()
+        troll = Permanent("troll_ascetic_001", "player_2", "troll", 1)
+        troll._regeneration_shield = 1
+        game.players["player_2"]["battlefield"].append(troll)
+        
+        # Terror destroys target nonartifact, nonblack creature, and CANNOT BE REGENERATED
+        execute_card_effect(game, "terror_001", "player_1", ["troll"])
+        
+        # Troll should be destroyed
+        self.assertNotIn(troll, game.players["player_2"]["battlefield"])
+
 if __name__ == '__main__':
     unittest.main()

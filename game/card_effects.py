@@ -19,6 +19,22 @@ class CardEffect:
         self.kicked = kicked
         self.ability_params = ability_params or {}
 
+    def _destroy_permanent(self, target_id: str, can_regenerate: bool = True) -> bool:
+        """Attempt to destroy a permanent. Returns True if destroyed, False if regenerated."""
+        perm = self.game.find_permanent(target_id)
+        if not perm:
+            return False
+            
+        if can_regenerate and perm._regeneration_shield > 0 and not perm._cannot_regenerate_this_turn:
+            perm._regeneration_shield -= 1
+            perm.damage = 0
+            perm.tapped = True
+            self.game.combat_system.remove_from_combat(perm.id)
+            return False
+            
+        self.game.remove_permanent(target_id)
+        return True
+
     def _draw_card(self, player_id: str, changes: List[Dict]) -> Optional[str]:
         """Draw one card and record an empty-library loss condition."""
         player = self.game.get_player_data(player_id)
@@ -286,11 +302,11 @@ class CardEffect:
             if perm:
                 card = get_card(perm.card_id)
                 if card and (is_artifact(card) or is_enchantment(card)):
-                    self.game.remove_permanent(target)
-                    changes.append({
-                        'type': 'DESTROY',
-                        'target': target
-                    })
+                    destroyed = self._destroy_permanent(target)
+                    if destroyed:
+                        changes.append({'type': 'DESTROY', 'target': target})
+                    else:
+                        changes.append({'type': 'REGENERATE', 'target': target})
         return {'state_changes': changes}
 
     def _handle_vines_of_vastwood(self) -> Dict:
@@ -431,11 +447,9 @@ class CardEffect:
             if perm and is_creature(perm.card_data):
                 card = get_card(perm.card_id)
                 if card and card.get('color') != 'B' and not is_artifact(card):
-                    self.game.remove_permanent(target)
-                    changes.append({
-                        'type': 'DESTROY',
-                        'target': target
-                    })
+                    destroyed = self._destroy_permanent(target, can_regenerate=False)
+                    if destroyed:
+                        changes.append({'type': 'DESTROY', 'target': target})
         return {'state_changes': changes}
 
     def _handle_doom_blade(self) -> Dict:
@@ -446,11 +460,11 @@ class CardEffect:
             if perm and is_creature(perm.card_data):
                 card = get_card(perm.card_id)
                 if card and card.get('color') != 'B':
-                    self.game.remove_permanent(target)
-                    changes.append({
-                        'type': 'DESTROY',
-                        'target': target
-                    })
+                    destroyed = self._destroy_permanent(target)
+                    if destroyed:
+                        changes.append({'type': 'DESTROY', 'target': target})
+                    else:
+                        changes.append({'type': 'REGENERATE', 'target': target})
         return {'state_changes': changes}
 
     def _handle_raise_dead(self) -> Dict:
@@ -587,8 +601,11 @@ class CardEffect:
         for target in self.targets:
             perm = self.game.find_permanent(target)
             if perm and perm.tapped:
-                self.game.remove_permanent(target)
-                changes.append({'type': 'DESTROY', 'target': target})
+                destroyed = self._destroy_permanent(target)
+                if destroyed:
+                    changes.append({'type': 'DESTROY', 'target': target})
+                else:
+                    changes.append({'type': 'REGENERATE', 'target': target})
         return {'state_changes': changes}
 
     def _handle_protection_giver(self) -> Dict:
