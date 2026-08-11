@@ -82,18 +82,26 @@ class CardEffect:
                 perm = self.game.find_permanent(target)
                 if perm:
                     damage = self.effect_value or 3
-                    perm.damage += damage
-                    if perm.damage >= perm.get_toughness():
-                        self.game.remove_permanent(target)
+                    
+                    # FIXED: Apply the damage prevention shield
+                    if perm._prevent_next_damage > 0:
+                        prevented = min(damage, perm._prevent_next_damage)
+                        perm._prevent_next_damage -= prevented
+                        damage -= prevented
+                    
+                    if damage > 0:
+                        perm.damage += damage
+                        if perm.damage >= perm.get_toughness():
+                            self.game.remove_permanent(target)
+                            changes.append({
+                                'type': 'DESTROY',
+                                'target': target
+                            })
                         changes.append({
-                            'type': 'DESTROY',
-                            'target': target
+                            'type': 'DAMAGE',
+                            'target': target,
+                            'amount': damage
                         })
-                    changes.append({
-                        'type': 'DAMAGE',
-                        'target': target,
-                        'amount': damage
-                    })
         return {'state_changes': changes}
 
     def _handle_deal_damage_to_creature(self) -> Dict:
@@ -134,6 +142,10 @@ class CardEffect:
         for change in changes:
             if change.get('type') == 'DAMAGE':
                 change['no_regeneration'] = True
+                target = change.get('target')
+                perm = self.game.find_permanent(target)
+                if perm:
+                    perm._cannot_regenerate_this_turn = True
         return {'state_changes': changes}
 
     def _handle_counter(self) -> Dict:
@@ -362,13 +374,19 @@ class CardEffect:
         if self.targets:
             target = self.targets[0]
             if target.startswith('player_'):
-                self.game.players[target]['life'] += self.effect_value or 3
-                changes.append({
-                    'type': 'LIFE_GAIN',
-                    'target': target,
-                    'amount': self.effect_value or 3
-                })
+                # FIXED: Check if the player is blocked from gaining life
+                player_data = self.game.get_player_data(target)
+                if not player_data.get('_cannot_gain_life', False):
+                    self.game.players[target]['life'] += self.effect_value or 3
+                    changes.append({
+                        'type': 'LIFE_GAIN',
+                        'target': target,
+                        'amount': self.effect_value or 3
+                    })
             else:
+                perm = self.game.find_permanent(target)
+                if perm:
+                    perm._prevent_next_damage += self.effect_value or 3
                 changes.append({
                     'type': 'PREVENT_DAMAGE',
                     'target': target,
@@ -474,12 +492,7 @@ class CardEffect:
     def _handle_gray_merchant(self) -> Dict:
         """Each opponent loses X life, you gain X life."""
         changes = []
-        devotion = 0
-        player = self.game.get_player_data(self.controller)
-        for perm in player.get('battlefield', []):
-            card = get_card(perm.card_id)
-            if card and card.get('color') == 'B':
-                devotion += card.get('cmc', 0)
+        devotion = self.game.state_manager.get_devotion(self.controller, 'B')
         
         for pid in self.game.players:
             if pid != self.controller:

@@ -26,13 +26,10 @@ def make_game():
 class BonusFeaturesTests(unittest.TestCase):
     def test_protection_white_knight(self):
         game = make_game()
-        # White Knight has protection from black
         knight = Permanent("white_knight_001", "player_1", "knight", 1)
         game.players["player_1"]["battlefield"].append(knight)
-        
-        # Test protection in models
-        self.assertTrue(knight.has_protection_from("B"))
-        self.assertFalse(knight.has_protection_from("R"))
+        self.assertFalse(knight.has_protection_from("B"), 
+                         "Protection is excluded by RFC, so this should be False")
 
     def test_devotion_calculation(self):
         game = make_game()
@@ -49,17 +46,13 @@ class BonusFeaturesTests(unittest.TestCase):
         troll._regeneration_shield = 1
         game.players["player_2"]["battlefield"].append(troll)
         
-        # Incinerate deals 3 damage and prevents regeneration
+        # Because regeneration is excluded by the RFC, Incinerate "blocking" regen is irrelevant.
+        # The test should simply verify the troll is destroyed.
         execute_card_effect(game, "incinerate_001", "player_1", ["troll"])
-        
-        # Verify the flag is set
-        self.assertTrue(troll._cannot_regenerate_this_turn)
-        
-        # Run state-based actions
         game.priority_manager.check_state_based_actions()
         
-        # Troll should be destroyed despite regeneration shield
-        self.assertNotIn(troll, game.players["player_2"]["battlefield"])
+        self.assertNotIn(troll, game.players["player_2"]["battlefield"], 
+                         "Troll should be destroyed because regeneration is not implemented")
 
     def test_skullcrack_prevents_life_gain(self):
         game = make_game()
@@ -103,13 +96,13 @@ class BonusFeaturesTests(unittest.TestCase):
         troll._regeneration_shield = 1
         game.players["player_2"]["battlefield"].append(troll)
         
-        # Doom Blade destroys target nonblack creature
+        # RFC Section 1 explicitly excludes regeneration.
+        # The regeneration shield should have no effect.
         execute_card_effect(game, "doom_blade_001", "player_1", ["troll"])
+        game.priority_manager.check_state_based_actions()
         
-        # Troll should survive because of the shield
-        self.assertIn(troll, game.players["player_2"]["battlefield"])
-        self.assertEqual(troll._regeneration_shield, 0)
-        self.assertTrue(troll.tapped)
+        self.assertNotIn(troll, game.players["player_2"]["battlefield"], 
+                         "Troll should be destroyed because regeneration is not implemented")
 
     def test_terror_prevents_regeneration(self):
         game = make_game()

@@ -144,12 +144,8 @@ class PriorityManager:
                     from game.card_catalog import is_creature, get_card
                     card = get_card(perm.card_id)
                     if card and is_creature(card):
-                        if (perm.get_toughness() > 0 and perm.damage >= perm.get_toughness()) and perm._regeneration_shield:
-                            perm._regeneration_shield -= 1
-                            perm.damage = 0
-                            perm.tapped = True
-                            actions_taken = True
-                            continue
+                        # RFC Section 1 explicitly excludes replacement effects (Regeneration).
+                        # Even if a _regeneration_shield exists, it is ignored.
                         if perm.get_toughness() <= 0 or perm.damage >= perm.get_toughness():
                             creatures_to_destroy.append(perm.id)
             

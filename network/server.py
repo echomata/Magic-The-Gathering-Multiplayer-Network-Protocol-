@@ -60,11 +60,13 @@ class MTGNPServer:
                 conn, addr = self.socket.accept()
                 self.log(f"New connection from {addr}")
 
+                # Strict RFC behavior: refuse any connection beyond the first two
+                if len(self.connections) >= 2:
+                    self.log("Refusing 3rd connection (RFC: additional attempts MUST be refused)")
+                    conn.close()
+                    continue
+
                 self.connections.add(conn)
-                if len(self.connections) > 2:
-                    self.spectator_conns.add(conn)
-                    self.game.spectator_conns.add(conn)
-                    self.log("Accepted spectator connection")
 
                 thread = threading.Thread(target=self._handle_client, args=(conn, addr))
                 thread.daemon = True
@@ -123,10 +125,6 @@ class MTGNPServer:
             self.send_error(conn, "ILLEGAL_ACTION", "Every PDU requires string type and integer seq_num", pdu)
             return
 
-        if conn in self.spectator_conns and pdu_type not in {'PING'}:
-            self.send_error(conn, "ILLEGAL_ACTION", "Spectators are read-only", pdu)
-            return
-
         handlers = {
             'PLAYER_READY': self.game.lifecycle_manager.handle_player_ready,
             'MULLIGAN_CHOICE': self.game.lifecycle_manager.handle_mulligan_choice,
@@ -183,7 +181,6 @@ class MTGNPServer:
 
         if conn in self.game.player_conns:
             self.game.player_conns.remove(conn)
-        self.game.spectator_conns.discard(conn)
         self.spectator_conns.discard(conn)
         self.connections.discard(conn)
 

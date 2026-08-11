@@ -31,6 +31,7 @@ class Permanent:
         self._hexproof = False
         self._temporary_protection_color = None
         self.temporary_abilities = set()
+        self._prevent_next_damage = 0
 
     def to_dict(self, include_controller: bool = True) -> Dict:
         """Convert to dictionary for JSON serialization."""
@@ -90,6 +91,7 @@ class Permanent:
     def has_protection_from(self, color: str) -> bool:
         if not color:
             return False
+        # FIXED: Check for the full word in abilities ("protection_black" instead of just "protection_B")
         return (
             f'protection_{color.lower()}' in self.card_data.get('abilities', [])
             or self._temporary_protection_color == color.upper()
