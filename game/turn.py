@@ -29,6 +29,14 @@ class TurnEngine:
         self.game.phase = "UNTAP"
         self.game.log("UNTAP step")
 
+        # Per RFC 7.2, no priority window exists during Untap. Clear any
+        # leftover priority state from the previous step so a stray
+        # PRIORITY_PASS here is cleanly rejected (NOT_YOUR_PRIORITY)
+        # instead of being silently matched against stale state.
+        self.game.priority_manager.priority_holder = None
+        self.game.priority_manager.priority_seq = None
+        self.game.priority_manager.passed_players = set()
+
         for pid, data in self.game.players.items():
             for perm in data.get('battlefield', []):
                 if perm.controller == self.game.active_player:
@@ -36,10 +44,6 @@ class TurnEngine:
                     perm._temporary_bonus = {'power': 0, 'toughness': 0}
                     perm.temporary_abilities.clear()
                     perm._regeneration_shield = 0
-                    perm._pacified = False
-                    perm._protected = False
-                    perm._hexproof = False
-                    perm._temporary_protection_color = None
                     perm.summoning_sick = False
 
         self.game.land_played_this_turn = False
@@ -147,15 +151,9 @@ class TurnEngine:
         self.game.log("FIRST_STRIKE_DAMAGE step")
 
         has_first_strike = False
-        all_creatures = []
         for attack in self.game.combat_system.attackers:
-            all_creatures.append(attack.get('creature_id'))
-        for blocker in self.game.combat_system.blockers:
-            all_creatures.append(blocker.get('creature_id'))
-            
-        for creature_id in all_creatures:
-            perm = self.game.find_permanent(creature_id)
-            if perm and (perm.has_first_strike() or perm.has_double_strike()):
+            perm = self.game.find_permanent(attack.get('creature_id'))
+            if perm and perm.has_first_strike():
                 has_first_strike = True
                 break
 
@@ -221,6 +219,13 @@ class TurnEngine:
         self.game.phase = "CLEANUP"
         self.game.log("CLEANUP step")
 
+        # Per RFC 7.8, no priority window exists during Cleanup (in MTGNP
+        # 1.0 no triggers fire at cleanup). Clear leftover priority state
+        # from End Step so a stray PRIORITY_PASS is cleanly rejected.
+        self.game.priority_manager.priority_holder = None
+        self.game.priority_manager.priority_seq = None
+        self.game.priority_manager.passed_players = set()
+
         self.game.broadcast_phase_transition("END_STEP", "CLEANUP")
 
         data = self.game.players[self.game.active_player]
@@ -231,15 +236,23 @@ class TurnEngine:
             return
 
         for pid, pdata in self.game.players.items():
-            pdata['_cannot_gain_life'] = False
-            pdata['_prevent_next_damage'] = 0
             for perm in pdata.get('battlefield', []):
                 perm.damage = 0
                 perm._temporary_bonus = {'power': 0, 'toughness': 0}
                 perm.temporary_abilities.clear()
                 perm._regeneration_shield = 0
-                perm._cannot_regenerate_this_turn = False
-                perm._prevent_next_damage = 0
+                # "Until end of turn" grants (e.g. Vines of Vastwood's
+                # hexproof, Mother of Runes' chosen protection color) expire
+                # at the Cleanup Step of the turn they were granted - NOT at
+                # the next Untap Step, which would let them incorrectly
+                # persist through the opponent's entire following turn.
+                # NOTE: _pacified (Pacifism) is deliberately NOT cleared
+                # here or anywhere automatically - it represents an Aura
+                # that stays attached (and thus in effect) until the Aura
+                # itself is removed, which no card in this pool does, so it
+                # should last for the rest of the game once applied.
+                perm._hexproof = False
+                perm._temporary_protection_color = None
 
         self.game.broadcast_game_state()
         self.end_turn()
@@ -260,11 +273,6 @@ class TurnEngine:
     def advance_step(self):
         """Advance to the next step/phase."""
         self.game.log(f"Advancing from {self.game.phase}")
-
-        # Mana remaining in the pool expires when the current step/phase
-        # ends. Mana is otherwise represented as an implementation detail
-        # because MTGNP clients declare complete payments in their PDUs.
-        self.game.floating_mana = {}
 
         step_handlers = {
             "UPKEEP": self.do_draw_step,

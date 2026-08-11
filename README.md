@@ -164,15 +164,10 @@ python launcher.py --list-cards
 ## AI Usage
 *(Describe all AI tools used such as ChatGPT, GitHub Copilot, Claude, etc., and detail how they were used to assist in this machine problem).*
 
-## Bonus Features Implemented (Full Card Effects)
-To fulfill the 10-point Bonus criteria for "Implementation of all Card Abilities and Effects", we successfully implemented several mechanics defined in the Master Card List that require extending the base MTGNP 1.0 specifications:
-1. **Kicker Mechanics**: We modified the `CAST_SPELL` and `STACK_PUSH` PDUs to include optional `kicked` (boolean) and `kicker_payment` (object) fields to fully support cards like *Goblin Bushwhacker* and *Vines of Vastwood*.
-2. **Regeneration (Replacement Effects)**: Despite the RFC base limitation against replacement effects, we implemented a `_regeneration_shield` system to accurately support *Troll Ascetic*, *Doom Blade*, and *Terror*.
-3. **Target Parameter Choices**: We extended the `ACTIVATE_ABILITY` and `STACK_PUSH` PDUs to accept an optional `ability_params` or `chosen_color` field to support *Mother of Runes*, which requires the controller to choose a specific protection color on activation.
-
 ## Known Limitations / Deviations from RFC
-While the MTGNP 1.0 protocol is fully compliant in its base state, a few keyword abilities present on catalog cards are **not required by the RFC** and are therefore omitted from the game logic:
+While the MTGNP 1.0 protocol is fully compliant, a few keyword abilities present on catalog cards are **not required by the RFC** and are therefore omitted from the base game logic:
 - **Flying / Evasion**: Any creature can currently block a flyer.
 - **Vigilance**: Attacking still taps the creature.
-- **Madness / Suspend**: Tagged on some cards but there are no PDU fields or code paths to invoke them.
+- **Hexproof / Protection**: The `_protected` flag is set by certain card effects but never verified in target validation.
+- **Kicker / Madness / Suspend**: Tagged on some cards but there are no PDU fields or code paths to invoke them.
 - **Trample**: Intentionally absent, as the RFC (Section 1) explicitly excludes it from MTGNP 1.0.

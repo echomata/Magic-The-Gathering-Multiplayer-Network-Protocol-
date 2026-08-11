@@ -60,9 +60,8 @@ def get_devotion(permanents: List, color: str) -> int:
     devotion = 0
     for perm in permanents:
         card = get_card(perm.card_id)
-        if card:
-            mana_cost = card.get('mana_cost', {})
-            devotion += mana_cost.get(color, 0)
+        if card and card.get('color') == color:
+            devotion += card.get('cmc', 0)
     return devotion
 
 

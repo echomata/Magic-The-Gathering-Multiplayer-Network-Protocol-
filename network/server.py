@@ -36,8 +36,6 @@ class MTGNPServer:
             echoed_seq = self.game.next_seq()
         pdu = {
             "type": "ERROR",
-            # The RFC ERROR schema echoes the rejected action's seq_num when
-            # one is available.
             "seq_num": echoed_seq,
             "code": code,
             "message": message
@@ -62,15 +60,11 @@ class MTGNPServer:
                 conn, addr = self.socket.accept()
                 self.log(f"New connection from {addr}")
 
-                # MTGNP 1.0 is a two-player protocol. Additional TCP
-                # connection attempts must be refused, rather than being
-                # seated as players or silently upgraded to spectators.
-                if len(self.connections) >= 2:
-                    self.log(f"Refusing additional connection from {addr}")
-                    conn.close()
-                    continue
-
                 self.connections.add(conn)
+                if len(self.connections) > 2:
+                    self.spectator_conns.add(conn)
+                    self.game.spectator_conns.add(conn)
+                    self.log("Accepted spectator connection")
 
                 thread = threading.Thread(target=self._handle_client, args=(conn, addr))
                 thread.daemon = True
@@ -78,12 +72,6 @@ class MTGNPServer:
 
         except KeyboardInterrupt:
             print("\nShutting down...")
-        except OSError as exc:
-            # Closing the listening socket from shutdown() interrupts a
-            # blocked accept() call. Treat that expected condition as a
-            # normal shutdown rather than leaking a thread traceback.
-            if self.running:
-                self.log(f"Accept loop error: {exc}")
         finally:
             self.shutdown()
 
@@ -172,11 +160,6 @@ class MTGNPServer:
         player_id = self.game.get_player_by_conn(conn)
         if not player_id:
             self.send_error(conn, "ILLEGAL_ACTION", "Unknown player", pdu)
-            return
-
-        expected_seq = self.game.players[player_id].get('last_seq_num')
-        if pdu.get('seq_num') != expected_seq:
-            self.send_error(conn, "STALE_ACTION", "Stale sequence number", pdu)
             return
 
         winner_id = self.game.get_other_player(player_id)

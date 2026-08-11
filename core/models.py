@@ -28,8 +28,6 @@ class Permanent:
         self._protected = False
         self._pacified = False
         self._regeneration_shield = 0
-        self._cannot_regenerate_this_turn = False
-        self._prevent_next_damage = 0
         self._hexproof = False
         self._temporary_protection_color = None
         self.temporary_abilities = set()
@@ -92,19 +90,8 @@ class Permanent:
     def has_protection_from(self, color: str) -> bool:
         if not color:
             return False
-        
-        color_map = {
-            'W': 'white',
-            'U': 'blue',
-            'B': 'black',
-            'R': 'red',
-            'G': 'green',
-            'C': 'colorless'
-        }
-        full_color = color_map.get(color.upper(), color.lower())
-        
         return (
-            f'protection_{full_color}' in self.card_data.get('abilities', [])
+            f'protection_{color.lower()}' in self.card_data.get('abilities', [])
             or self._temporary_protection_color == color.upper()
         )
 

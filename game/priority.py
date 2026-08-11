@@ -136,20 +136,6 @@ class PriorityManager:
                         self.game.get_other_player(dead_players[0]), "LIFE_ZERO"
                     )
                 return
-
-            # Drawing from an empty library is a game-loss condition. Card
-            # effects mark the attempted draw during resolution, then this
-            # SBA pass applies the authoritative GAME_OVER result.
-            empty_draw_players = [
-                pid for pid, data in self.game.players.items()
-                if data.get('empty_draw_attempted', False)
-            ]
-            if empty_draw_players:
-                loser = empty_draw_players[0]
-                self.game.lifecycle_manager.end_game(
-                    self.game.get_other_player(loser), "DECK_EMPTY"
-                )
-                return
             
             # 2. Creatures with toughness <= 0 or damage >= toughness die
             creatures_to_destroy = []
@@ -158,11 +144,10 @@ class PriorityManager:
                     from game.card_catalog import is_creature, get_card
                     card = get_card(perm.card_id)
                     if card and is_creature(card):
-                        if (perm.get_toughness() > 0 and perm.damage >= perm.get_toughness()) and perm._regeneration_shield and not perm._cannot_regenerate_this_turn:
+                        if (perm.get_toughness() > 0 and perm.damage >= perm.get_toughness()) and perm._regeneration_shield:
                             perm._regeneration_shield -= 1
                             perm.damage = 0
                             perm.tapped = True
-                            self.game.combat_system.remove_from_combat(perm.id)
                             actions_taken = True
                             continue
                         if perm.get_toughness() <= 0 or perm.damage >= perm.get_toughness():
@@ -233,6 +218,23 @@ class PriorityManager:
                         'permanent': perm,
                         'kicked': item.kicked
                     })
+
+                    # Auras (e.g. Pacifism) both become a permanent AND
+                    # apply an immediate on-resolve effect to whatever they
+                    # enchant - unlike a mana dork's "effect" field (which
+                    # only describes a LATER activated ability, invoked
+                    # separately via ACTIVATE_ABILITY), an Aura's "effect"
+                    # is exactly what should happen right now.
+                    if card.get('subtype') == 'Aura' and card.get('effect'):
+                        from game.card_effects import execute_card_effect
+                        aura_result = execute_card_effect(
+                            self.game, item.card_id, item.controller,
+                            item.targets, kicked=item.kicked
+                        )
+                        if aura_result.get('error'):
+                            self.game.log(f"Effect error: {aura_result['error']}")
+                        if aura_result.get('state_changes'):
+                            state_changes.extend(aura_result['state_changes'])
                 else:
                     effect = card.get('effect')
                     if effect:

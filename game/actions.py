@@ -78,18 +78,14 @@ class ActionHandler:
         if self.game.state != "IN_GAME" or self.game.phase != "CLEANUP":
             self.game.send_error(conn, "WRONG_PHASE", "Can only discard in Cleanup step", pdu)
             return
-        """Handle DISCARD PDU."""
-        if self.game.state != "IN_GAME" or self.game.phase != "CLEANUP":
-            self.game.send_error(conn, "WRONG_PHASE", "Can only discard in Cleanup step", pdu)
-            return
 
         player_id = self.game.get_player_by_conn(conn)
         if not player_id or player_id != self.waiting_for_discard:
             self.game.send_error(conn, "ILLEGAL_ACTION", "Not your turn to discard", pdu)
             return
 
-        if pdu.get('seq_num') != self.game.players[player_id].get('last_seq_num'):
-            self.game.send_error(conn, "STALE_ACTION", "Stale priority or missing seq_num", pdu)
+        if 'seq_num' not in pdu:
+            self.game.send_error(conn, "STALE_ACTION", "Missing seq_num", pdu)
             return
 
         card_ids = pdu.get('card_ids', [])
@@ -175,10 +171,10 @@ class ActionHandler:
             return "This spell can only target a player"
         if creature_only and (not perm or not is_creature(target_card)):
             return "This spell must target a creature"
-        if perm and (getattr(perm, '_hexproof', False) or 'hexproof' in perm.card_data.get('abilities', [])):
-            if perm.controller != player_id:
+        if perm and perm.controller != player_id:
+            if getattr(perm, '_hexproof', False) or 'hexproof' in perm.card_data.get('abilities', []):
                 return "Target has hexproof"
-        if perm and perm.has_protection_from(card.get('color', '')):
+        if perm and perm.has_protection_from(card.get('color', '')) and perm.controller != player_id:
             return "Target has protection from this spell's color"
         if artifact_or_enchantment and (not perm or not (is_artifact(target_card) or is_enchantment(target_card))):
             return "This spell must target an artifact or enchantment"
@@ -392,19 +388,8 @@ class ActionHandler:
             self.game.send_error(conn, "STALE_ACTION", "Stale priority", pdu)
             return
 
-        attackers = pdu.get('attackers', [])
-        if not isinstance(attackers, list):
-            self.game.send_error(conn, "ILLEGAL_ACTION", "attackers must be an array", pdu)
-            return
-
-        # Validate everything first. Illegal actions must leave combat state
-        # and tapped states unchanged.
-        new_attackers = []
-        attackers_to_tap = []
-        for attack in attackers:
-            if not isinstance(attack, dict):
-                self.game.send_error(conn, "ILLEGAL_ACTION", "Each attacker must be an object", pdu)
-                return
+        self.game.combat_system.attackers = []
+        for attack in pdu.get('attackers', []):
             creature_id = attack.get('creature_id')
             target = attack.get('target')
 
@@ -413,7 +398,7 @@ class ActionHandler:
                 self.game.send_error(conn, "ILLEGAL_ACTION", f"Invalid creature: {creature_id}", pdu)
                 return
 
-            if any(a.get('creature_id') == creature_id for a in new_attackers):
+            if any(a.get('creature_id') == creature_id for a in self.game.combat_system.attackers):
                 self.game.send_error(conn, "ILLEGAL_ACTION", "Creature declared more than once", pdu)
                 return
 
@@ -425,17 +410,9 @@ class ActionHandler:
                 self.game.send_error(conn, "ILLEGAL_TARGET", f"Invalid target: {target}", pdu)
                 return
 
-            if target == player_id:
-                self.game.send_error(conn, "ILLEGAL_TARGET", "Cannot attack yourself", pdu)
-                return
-
             if not perm.has_vigilance():
-                attackers_to_tap.append(perm)
-            new_attackers.append({"creature_id": creature_id, "target": target})
-
-        self.game.combat_system.attackers = new_attackers
-        for perm in attackers_to_tap:
-            perm.tapped = True
+                perm.tapped = True
+            self.game.combat_system.attackers.append({"creature_id": creature_id, "target": target})
 
         self.game.log(f"Player {player_id} declared {len(self.game.combat_system.attackers)} attackers")
         self.game.broadcast_game_state()
@@ -468,19 +445,9 @@ class ActionHandler:
             self.game.send_error(conn, "STALE_ACTION", "Stale priority", pdu)
             return
 
-        blockers = pdu.get('blockers', [])
-        if not isinstance(blockers, list):
-            self.game.send_error(conn, "ILLEGAL_ACTION", "blockers must be an array", pdu)
-            return
-
-        # Validate the complete declaration before replacing the current
-        # combat assignment.
-        new_blockers = []
+        self.game.combat_system.blockers = []
         used_blockers = set()
-        for block in blockers:
-            if not isinstance(block, dict):
-                self.game.send_error(conn, "ILLEGAL_ACTION", "Each blocker must be an object", pdu)
-                return
+        for block in pdu.get('blockers', []):
             creature_id = block.get('creature_id')
             blocking_id = block.get('blocking_id')
 
@@ -510,9 +477,7 @@ class ActionHandler:
                 self.game.send_error(conn, "ILLEGAL_ACTION", f"Attacker {blocking_id} not found", pdu)
                 return
 
-            new_blockers.append({"creature_id": creature_id, "blocking_id": blocking_id})
-
-        self.game.combat_system.blockers = new_blockers
+            self.game.combat_system.blockers.append({"creature_id": creature_id, "blocking_id": blocking_id})
 
         self.game.log(f"Player {player_id} declared {len(self.game.combat_system.blockers)} blockers")
         self.game.broadcast_game_state()
@@ -536,13 +501,8 @@ class ActionHandler:
         attacker_id = pdu.get('attacker_id')
         blocker_order = pdu.get('blocker_order', [])
 
-        if not isinstance(blocker_order, list):
-            self.game.send_error(conn, "ILLEGAL_ACTION", "blocker_order must be an array", pdu)
-            return
-
         attacker = self.game.find_permanent(attacker_id)
-        if not attacker or not any(a.get('creature_id') == attacker_id
-                                   for a in self.game.combat_system.attackers):
+        if not attacker:
             self.game.send_error(conn, "ILLEGAL_ACTION", f"Unknown attacker: {attacker_id}", pdu)
             return
 
@@ -551,12 +511,8 @@ class ActionHandler:
             self.game.send_error(conn, "ILLEGAL_ACTION", "Not a multi-blocked attacker", pdu)
             return
 
-        expected_ids = [b.get('creature_id') for b in blockers]
-        if len(blocker_order) != len(expected_ids) or len(set(blocker_order)) != len(blocker_order):
-            self.game.send_error(conn, "ILLEGAL_ACTION", "Each blocker must appear exactly once", pdu)
-            return
         for block_id in blocker_order:
-            if block_id not in expected_ids:
+            if not any(b.get('creature_id') == block_id for b in blockers):
                 self.game.send_error(conn, "ILLEGAL_ACTION", f"Invalid blocker: {block_id}", pdu)
                 return
 
@@ -688,8 +644,8 @@ class ActionHandler:
                 
         if targets:
             target_perm = self.game.find_permanent(targets[0])
-            if target_perm:
-                if target_perm.controller != player_id and target_perm.has_hexproof():
+            if target_perm and target_perm.controller != player_id:
+                if target_perm.has_hexproof():
                     self.game.send_error(conn, "ILLEGAL_TARGET", "Target has hexproof", pdu)
                     return
                 source_color = perm.card_data.get('color', '') if perm.card_data else ''

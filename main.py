@@ -114,19 +114,8 @@ def run_client_interactive(client):
             elif command == 'activate' and len(parts) >= 3:
                 source_id = parts[1]
                 ability_index = int(parts[2])
-                targets = []
-                cost_payment = {"tap": False, "mana": {}}
-                for p in parts[3:]:
-                    if p.lower() == "tap":
-                        cost_payment["tap"] = True
-                    elif p.lower().startswith("mana="):
-                        colors = p[5:].split(",")
-                        for c in colors:
-                            c = c.upper().strip()
-                            if c:
-                                cost_payment["mana"][c] = cost_payment["mana"].get(c, 0) + 1
-                    else:
-                        targets.append(p)
+                targets = parts[3:] if len(parts) > 3 else []
+                cost_payment = {"tap": False, "mana": {}} 
                 client.send_activate_ability(source_id, ability_index, targets, cost_payment)
                 print(f"Activating ability {ability_index} on {source_id}")
             elif command == 'land' and len(parts) >= 2:

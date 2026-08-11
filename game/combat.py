@@ -12,17 +12,6 @@ class CombatSystem:
         self.damage_order = {}
         self.first_strike_done = False
 
-    def remove_from_combat(self, perm_id: str):
-        """Remove a permanent from combat (e.g., when regenerated)."""
-        self.attackers = [a for a in self.attackers if a.get('creature_id') != perm_id]
-        self.blockers = [b for b in self.blockers if b.get('creature_id') != perm_id and b.get('blocking_id') != perm_id]
-        
-        if perm_id in self.damage_order:
-            del self.damage_order[perm_id]
-        for aid, order in self.damage_order.items():
-            if perm_id in order:
-                order.remove(perm_id)
-
     @staticmethod
     def _deals_damage_in_pass(perm, first_strike_only: bool) -> bool:
         """Whether a creature deals damage in this pass of combat damage.
@@ -50,6 +39,7 @@ class CombatSystem:
     def deal_combat_damage(self, first_strike_only: bool = False):
         """Deal combat damage."""
         damage_events = []
+        creatures_died = []
 
         for attack in self.attackers:
             creature_id = attack.get('creature_id')
@@ -66,7 +56,13 @@ class CombatSystem:
             blockers = [b for b in self.blockers if b.get('blocking_id') == creature_id]
 
             if blockers:
-                trample_damage = 0
+                # Per RFC 9.7: "MTGNP 1.0 does not implement trample. A
+                # blocked attacker deals its full combat damage to its
+                # blocker(s) only, never to the defending player." All of
+                # the attacker's power is assigned among its blockers
+                # (in damage_order when multiply-blocked); none of it ever
+                # reaches the defending player's life total, regardless of
+                # whether the card has a "trample" ability tag.
                 if len(blockers) > 1 and creature_id in self.damage_order:
                     ordered = self.damage_order[creature_id]
                     remaining_power = power
@@ -77,64 +73,36 @@ class CombatSystem:
                         if blocker_perm:
                             damage_to_deal = min(remaining_power, blocker_perm.get_toughness())
                             if not self._damage_is_prevented(perm, blocker_perm):
-                                prevented = min(damage_to_deal, getattr(blocker_perm, '_prevent_next_damage', 0))
-                                blocker_perm._prevent_next_damage = max(0, getattr(blocker_perm, '_prevent_next_damage', 0) - damage_to_deal)
-                                damage_to_deal -= prevented
-                                if damage_to_deal > 0:
-                                    blocker_perm.damage += damage_to_deal
-                                    damage_events.append({
-                                        "source": creature_id,
-                                        "target": block_id,
-                                        "amount": damage_to_deal
-                                    })
+                                blocker_perm.damage += damage_to_deal
+                                if blocker_perm.damage >= blocker_perm.get_toughness():
+                                    creatures_died.append(block_id)
+                                damage_events.append({
+                                    "source": creature_id,
+                                    "target": block_id,
+                                    "amount": damage_to_deal
+                                })
                             remaining_power -= damage_to_deal
-                    if perm.card_data and 'trample' in perm.card_data.get('abilities', []):
-                        trample_damage = max(remaining_power, 0)
                 else:
                     for block in blockers:
                         blocker_perm = self.game.find_permanent(block.get('creature_id'))
                         if blocker_perm:
-                            lethal = blocker_perm.get_toughness()
-                            trample_damage = max(power - lethal, 0) if (
-                                perm.card_data and
-                                'trample' in perm.card_data.get('abilities', [])
-                            ) else 0
-                            assigned_to_blocker = power - trample_damage
+                            assigned_to_blocker = power
                             if not self._damage_is_prevented(perm, blocker_perm):
-                                prevented = min(assigned_to_blocker, getattr(blocker_perm, '_prevent_next_damage', 0))
-                                blocker_perm._prevent_next_damage = max(0, getattr(blocker_perm, '_prevent_next_damage', 0) - assigned_to_blocker)
-                                assigned_to_blocker -= prevented
-                                if assigned_to_blocker > 0:
-                                    blocker_perm.damage += assigned_to_blocker
-                                    damage_events.append({
-                                        "source": creature_id,
-                                        "target": block.get('creature_id'),
-                                        "amount": assigned_to_blocker
-                                    })
-                if trample_damage and target in self.game.players:
-                    player = self.game.players[target]
-                    prevented = min(trample_damage, player.get('_prevent_next_damage', 0))
-                    player['_prevent_next_damage'] = max(0, player.get('_prevent_next_damage', 0) - trample_damage)
-                    trample_damage -= prevented
-                    if trample_damage > 0:
-                        player['life'] -= trample_damage
-                        damage_events.append({
-                            "source": creature_id,
-                            "target": target,
-                            "amount": trample_damage
-                        })
+                                blocker_perm.damage += assigned_to_blocker
+                                if blocker_perm.damage >= blocker_perm.get_toughness():
+                                    creatures_died.append(block.get('creature_id'))
+                                damage_events.append({
+                                    "source": creature_id,
+                                    "target": block.get('creature_id'),
+                                    "amount": assigned_to_blocker
+                                })
             else:
-                player = self.game.players[target]
-                prevented = min(power, player.get('_prevent_next_damage', 0))
-                player['_prevent_next_damage'] = max(0, player.get('_prevent_next_damage', 0) - power)
-                power -= prevented
-                if power > 0:
-                    player['life'] -= power
-                    damage_events.append({
-                        "source": creature_id,
-                        "target": target,
-                        "amount": power
-                    })
+                self.game.players[target]['life'] -= power
+                damage_events.append({
+                    "source": creature_id,
+                    "target": target,
+                    "amount": power
+                })
 
         for block in self.blockers:
             creature_id = block.get('creature_id')
@@ -151,22 +119,40 @@ class CombatSystem:
             attacker_perm = self.game.find_permanent(blocking_id)
             if attacker_perm:
                 if not self._damage_is_prevented(perm, attacker_perm):
-                    prevented = min(power, getattr(attacker_perm, '_prevent_next_damage', 0))
-                    attacker_perm._prevent_next_damage = max(0, getattr(attacker_perm, '_prevent_next_damage', 0) - power)
-                    power -= prevented
-                    if power > 0:
-                        attacker_perm.damage += power
-                        damage_events.append({
-                            "source": creature_id,
-                            "target": blocking_id,
-                            "amount": power
-                        })
+                    attacker_perm.damage += power
+                    if attacker_perm.damage >= attacker_perm.get_toughness():
+                        creatures_died.append(blocking_id)
+                    damage_events.append({
+                        "source": creature_id,
+                        "target": blocking_id,
+                        "amount": power
+                    })
+
+        # Regeneration (RFC doesn't define this card pool's regenerate
+        # mechanic, but game/priority.py's check_state_based_actions()
+        # already implements it correctly for non-combat lethal damage;
+        # combat damage must respect it too, or "regenerate" creatures
+        # would still die whenever combat, not some other effect, deals
+        # the lethal damage). A creature with a regeneration shield is
+        # untapped->tapped, has its damage removed, and survives; the
+        # shield is consumed instead of the creature being destroyed.
+        actual_deaths = []
+        for creature_id in set(creatures_died):
+            perm = self.game.find_permanent(creature_id)
+            if perm and perm._regeneration_shield > 0:
+                perm._regeneration_shield -= 1
+                perm.damage = 0
+                perm.tapped = True
+                continue
+            self.game.remove_permanent(creature_id)
+            actual_deaths.append(creature_id)
 
         pdu = {
             "type": "COMBAT_DAMAGE_RESULT",
             "seq_num": self.game.next_seq(),
             "damage_events": damage_events,
-            "life_totals": {pid: data.get('life', 20) for pid, data in self.game.players.items()}
+            "life_totals": {pid: data.get('life', 20) for pid, data in self.game.players.items()},
+            "creatures_died": actual_deaths
         }
         self.game.broadcast(pdu)
 

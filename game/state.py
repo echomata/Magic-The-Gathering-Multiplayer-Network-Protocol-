@@ -67,9 +67,8 @@ class GameState:
         data = self.game.players.get(player_id, {})
         for perm in data.get('battlefield', []):
             card = get_card(perm.card_id)
-            if card:
-                mana_cost = card.get('mana_cost', {})
-                devotion += mana_cost.get(color, 0)
+            if card and card.get('color') == color:
+                devotion += card.get('cmc', 0)
         return devotion
 
     def build_state_dict(self, player_id: str) -> Dict:
