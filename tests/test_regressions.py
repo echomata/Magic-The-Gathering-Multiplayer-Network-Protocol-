@@ -9,26 +9,35 @@ from network.network import decode_message, encode_message
 
 
 class FakeServer:
+    def __init__(self):
+        self.pdus = []
+        self.errors = []
+
     def send_pdu(self, conn, pdu):
-        pass
+        self.pdus.append(pdu)
 
     def send_error(self, conn, code, message, rejected_action=None):
-        pass
+        self.errors.append((code, message))
+
+    def broadcast_to_game(self, pdu):
+        self.pdus.append(pdu)
 
 
 def make_game():
     game = Game(FakeServer())
     game.players = {
         "player_1": {
-            "conn": None, "hand": [], "library": [], "graveyard": [],
+            "conn": "conn_1", "hand": [], "library": [], "graveyard": [],
             "exile": [], "battlefield": [], "life": 20,
         },
         "player_2": {
-            "conn": None, "hand": [], "library": [], "graveyard": [],
+            "conn": "conn_2", "hand": [], "library": [], "graveyard": [],
             "exile": [], "battlefield": [], "life": 20,
         },
     }
+    game.player_conns = ["conn_1", "conn_2"]
     return game
+
 
 
 class ProtocolRegressionTests(unittest.TestCase):
@@ -375,6 +384,90 @@ class ProtocolRegressionTests(unittest.TestCase):
 
         self.assertEqual(game.players["player_2"]["battlefield"], [])
 
+    def test_discard_at_cleanup_logic(self):
+        game = make_game()
+        game.state = "IN_GAME"
+        game.phase = "CLEANUP"
+        game.active_player = "player_1"
+        game.players["player_1"]["hand"] = [f"card_{i}" for i in range(8)]
+        
+        game.action_handler.waiting_for_discard = "player_1"
+        game.action_handler.handle_discard("conn_1", {
+            "type": "DISCARD", 
+            "seq_num": 1,
+            "card_ids": ["card_0"]
+        })
+        self.assertEqual(len(game.players["player_1"]["hand"]), 7)
+        self.assertIsNone(game.action_handler.waiting_for_discard)
+        self.assertEqual(game.turn, 1)  # Advanced to next turn
+
+    def test_deck_empty_win_condition_logic(self):
+        game = make_game()
+        game.state = "IN_GAME"
+        game.players["player_1"]["library"] = []  # Empty library
+        game.active_player = "player_1"
+        
+        # When drawing a card, should trigger game over
+        game.turn_engine.do_draw_step()
+        self.assertEqual(game.state, "LOBBY")
+        
+        game_overs = [p for p in game.server.pdus if p.get("type") == "GAME_OVER"]
+        self.assertEqual(len(game_overs), 2)
+        self.assertEqual(game_overs[0]["reason"], "DECK_EMPTY")
+        self.assertEqual(game_overs[0]["winner_id"], "player_2")
+        
+    def test_simultaneous_life_zero_logic(self):
+        game = make_game()
+        game.state = "IN_GAME"
+        game.players["player_1"]["life"] = 0
+        game.players["player_2"]["life"] = 0
+        game.active_player = "player_1"
+        
+        game.priority_manager.check_state_based_actions()
+        self.assertEqual(game.state, "LOBBY")
+        
+        game_overs = [p for p in game.server.pdus if p.get("type") == "GAME_OVER"]
+        self.assertEqual(len(game_overs), 2)
+        self.assertEqual(game_overs[0]["reason"], "LIFE_ZERO")
+        self.assertEqual(game_overs[0]["winner_id"], "player_2")
+
+    def test_counterspell_stack_interaction_logic(self):
+        from core.models import StackItem
+        game = make_game()
+        game.state = "IN_GAME"
+        
+        # Player 1 casts a bolt
+        bolt_item = StackItem("lightning_bolt_001", "player_1", ["player_2"])
+        game.stack.append(bolt_item)
+        
+        # Player 2 casts counterspell targeting the bolt
+        counter_item = StackItem("counterspell_001", "player_2", [bolt_item.stack_item_id])
+        game.stack.append(counter_item)
+        
+        # Resolve counterspell
+        game.priority_manager.resolve_stack()
+        
+        # Bolt should be removed from stack, stack should be empty
+        self.assertEqual(len(game.stack), 0)
+        self.assertEqual(game.players["player_2"]["life"], 20)  # Bolt did not resolve
+
+    def test_combat_damage_end_to_end_logic(self):
+        from core.models import Permanent
+        game = make_game()
+        game.active_player = "player_1"
+        atk = Permanent("goblin_guide_001", "player_1", "atk", 0)
+        blk = Permanent("grizzly_bears_001", "player_2", "blk", 0)
+        game.players["player_1"]["battlefield"] = [atk]
+        game.players["player_2"]["battlefield"] = [blk]
+        
+        game.combat_system.attackers = [{"creature_id": "atk", "target": "player_2"}]
+        game.combat_system.blockers = [{"creature_id": "blk", "blocking_id": "atk"}]
+        
+        game.combat_system.deal_combat_damage()
+        game.priority_manager.check_state_based_actions()
+        
+        self.assertEqual(len(game.players["player_1"]["battlefield"]), 0)
+        self.assertEqual(len(game.players["player_2"]["battlefield"]), 0)
 
 if __name__ == "__main__":
     unittest.main()

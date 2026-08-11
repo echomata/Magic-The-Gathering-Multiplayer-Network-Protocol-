@@ -165,7 +165,10 @@ python launcher.py --list-cards
 *(Describe all AI tools used such as ChatGPT, GitHub Copilot, Claude, etc., and detail how they were used to assist in this machine problem).*
 
 ## Known Limitations / Deviations from RFC
-While the MTGNP 1.0 protocol is fully compliant, a few keyword abilities present on catalog cards are **not required by the RFC** and are therefore omitted from the base game logic:
+While the MTGNP 1.0 protocol is strictly compliant in its foundational engine (priority passes, network framing, sequence numbering), several **intentional deviations** were introduced to support complex bonus card effects not covered by the original specification:
+- **First Strike / Assign Damage Order**: To support cards with First Strike (e.g., `White Knight`, `Black Knight`), two additional combat steps (`ASSIGN_DAMAGE_ORDER` and `FIRST_STRIKE_DAMAGE`) were added to the phase progression. The base RFC defines only 14 steps, whereas this implementation has 16 to properly resolve First Strike mechanics.
+- **Colored Mana Tracking**: The RFC implies generic mana tracking, but the engine implements fully distinct colored mana pools (W, U, B, R, G) to handle specific casting costs and devotion.
+- **Advanced State Mechanics**: The protocol state was augmented with `_cannot_gain_life` (for `Skullcrack`), `_prevent_next_damage` (for `Healing Salve`), and `get_devotion()` calculations (for `Gray Merchant of Asphodel`). These fields extend the state beyond the base RFC's `Permanent` definition but are required for the bonus features to function correctly.
 - **Flying / Evasion**: Any creature can currently block a flyer.
 - **Vigilance**: Attacking still taps the creature.
 - **Hexproof / Protection**: The `_protected` flag is set by certain card effects but never verified in target validation.
