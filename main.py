@@ -131,12 +131,18 @@ def run_client_interactive(client):
                     attackers = [{"creature_id": creature_id, "target": target or "player_2"}]
                     client.send_declare_attackers(attackers)
                     print(f"Declared {creature_id} as attacker")
-            elif command == 'block' and len(parts) >= 3:
-                creature_id = parts[1]
-                blocking_id = parts[2]
-                blockers = [{"creature_id": creature_id, "blocking_id": blocking_id}]
-                client.send_declare_blockers(blockers)
-                print(f"Declared {creature_id} blocking {blocking_id}")
+            elif command == 'block':
+                if len(parts) == 1 or (len(parts) >= 2 and parts[1].lower() in ['none', 'done']):
+                    client.send_declare_blockers([])
+                    print("Declared 0 blockers")
+                elif len(parts) >= 3:
+                    creature_id = parts[1]
+                    blocking_id = parts[2]
+                    blockers = [{"creature_id": creature_id, "blocking_id": blocking_id}]
+                    client.send_declare_blockers(blockers)
+                    print(f"Declared {creature_id} blocking {blocking_id}")
+                else:
+                    print("Usage: block <your_creature_id> <attacking_creature_id> OR block none")
             elif command == 'order_damage' and len(parts) >= 3:
                 attacker_id = parts[1]
                 blocker_order = parts[2:]
