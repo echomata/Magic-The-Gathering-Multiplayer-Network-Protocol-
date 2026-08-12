@@ -121,12 +121,16 @@ def run_client_interactive(client):
                 card_id = parts[1]
                 client.send_play_land(card_id)
                 print(f"Playing land {card_id}")
-            elif command == 'attack' and len(parts) >= 2:
-                creature_id = parts[1]
-                target = parts[2] if len(parts) > 2 else None
-                attackers = [{"creature_id": creature_id, "target": target or "player_2"}]
-                client.send_declare_attackers(attackers)
-                print(f"Declared {creature_id} as attacker")
+            elif command == 'attack':
+                if len(parts) == 1 or (len(parts) >= 2 and parts[1].lower() in ['none', 'done']):
+                    client.send_declare_attackers([])
+                    print("Declared 0 attackers")
+                elif len(parts) >= 2:
+                    creature_id = parts[1]
+                    target = parts[2] if len(parts) > 2 else None
+                    attackers = [{"creature_id": creature_id, "target": target or "player_2"}]
+                    client.send_declare_attackers(attackers)
+                    print(f"Declared {creature_id} as attacker")
             elif command == 'block' and len(parts) >= 3:
                 creature_id = parts[1]
                 blocking_id = parts[2]
