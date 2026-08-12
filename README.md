@@ -170,7 +170,7 @@ python launcher.py --list-cards
 ## AI Usage
 - **Gemini**: Used it for understanding the specs and rechecking if everything is implemented. Also used it to format the README.md and for debugging.
 - **Codex**: Used for debugging and code creation for complex logic.
-- **Claude**: Used for debugging and code creation for complex logic.
+- **Claude**: Used it for understanding the specs and rechecking if everything is implemented. Also used for debugging and code creation for complex logic.
 
 ## Known Limitations / Deviations from RFC
 While the MTGNP 1.0 protocol is strictly compliant in its foundational engine (priority passes, network framing, sequence numbering), several **intentional deviations** were introduced to support complex bonus card effects not covered by the original specification:
