@@ -147,22 +147,30 @@ python launcher.py --list-cards
 
 ## Work Distribution Matrix
 
+- Member 1: CRISOLOGO, PAUL MARTIN RYAN
+- Member 2: MARQUEZ, JAMES BENEDICT
+- Member 3: OCAMPO, JERICHO
+- Member 4: RAYMUNDO, MARTINA GABRIELLE
+
 | Task / Feature | Member 1 | Member 2 | Member 3 | Member 4 |
-|---|---|---|---|---|
-| TCP Server: connection handling, framing, dispatch | | | | |
-| Game lifecycle: LOBBY, GAME_SETUP, MULLIGAN logic | | | | |
-| Turn & phase engine (all phases/steps, transitions) | | | | |
-| Priority & Stack logic, spell/ability resolution | | | | |
-| Combat system (attackers, blockers, damage) | | | | |
-| Client implementation & state rendering | | | | |
-| PDU serialisation/deserialisation (all 25 PDU types) | | | | |
-| Error handling, PING/PONG heartbeat, disconnect logic | | | | |
-| Verbose mode (client + server PDU logging, toggle on/off) | | | | |
-| Testing & interoperability | | | | |
-| README / documentation / AI disclosure | | | | |
+|---|:---:|:---:|:---:|:---:|
+| TCP Server: connection handling, framing, dispatch | X | X | | |
+| Game lifecycle: LOBBY, GAME_SETUP, MULLIGAN logic | | X | | |
+| Turn & phase engine (all phases/steps, transitions) | | X | X | |
+| Priority & Stack logic, spell/ability resolution | X | | X | |
+| Combat system (attackers, blockers, damage) | | | X | |
+| Client implementation & state rendering | X | | | |
+| PDU serialisation/deserialisation (all 25 PDU types) | | | | X |
+| Error handling, PING/PONG heartbeat, disconnect logic | | | | X |
+| Verbose mode (client + server PDU logging, toggle on/off) | X | | | |
+| Testing & interoperability | | | X | X |
+| README / documentation / AI disclosure | | X | | |
+| Bonus Features: Advanced mechanics, custom card effects, and additional combat steps | | | | X |
 
 ## AI Usage
-*(Describe all AI tools used such as ChatGPT, GitHub Copilot, Claude, etc., and detail how they were used to assist in this machine problem).*
+- **Gemini**: Used it for understanding the specs and rechecking if everything is implemented. Also used it to format the README.md and for debugging.
+- **Codex**: Used for debugging and code creation for complex logic.
+- **Claude**: Used for debugging and code creation for complex logic.
 
 ## Known Limitations / Deviations from RFC
 While the MTGNP 1.0 protocol is strictly compliant in its foundational engine (priority passes, network framing, sequence numbering), several **intentional deviations** were introduced to support complex bonus card effects not covered by the original specification:
